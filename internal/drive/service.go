@@ -1,0 +1,410 @@
+// Package drive provides Google Drive operations.
+package drive
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/jflowers/gcal-organizer/pkg/models"
+	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/option"
+)
+
+// ActionResult describes the result of an operation.
+type ActionResult struct {
+	Action  string // "move", "shortcut", "skip", "create_folder"
+	Skipped bool   // True if operation was skipped (dry-run or already exists)
+	Reason  string // Why it was skipped (e.g., "already exists", "dry-run")
+	Details string // Human-readable details about what happened/would happen
+}
+
+// Service provides Google Drive operations.
+type Service struct {
+	client           *drive.Service
+	filenamePattern  *regexp.Regexp
+	masterFolderID   string
+	masterFolderName string
+	currentUserEmail string
+	dryRun           bool
+}
+
+// NewService creates a new Drive service.
+func NewService(ctx context.Context, httpClient *http.Client, filenamePattern string, dryRun bool) (*Service, error) {
+	srv, err := drive.NewService(ctx, option.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Drive service: %w", err)
+	}
+
+	pattern, err := regexp.Compile(filenamePattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid filename pattern: %w", err)
+	}
+
+	// Get current user email
+	about, err := srv.About.Get().Fields("user").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	return &Service{
+		client:           srv,
+		filenamePattern:  pattern,
+		currentUserEmail: about.User.EmailAddress,
+		dryRun:           dryRun,
+	}, nil
+}
+
+// SetMasterFolder sets the master folder ID by name.
+func (s *Service) SetMasterFolder(ctx context.Context, folderName string) error {
+	query := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false", folderName)
+	result, err := s.client.Files.List().Q(query).Fields("files(id, name)").Do()
+	if err != nil {
+		return fmt.Errorf("failed to find master folder: %w", err)
+	}
+
+	if len(result.Files) == 0 {
+		return fmt.Errorf("master folder '%s' not found", folderName)
+	}
+
+	s.masterFolderID = result.Files[0].Id
+	s.masterFolderName = folderName
+	return nil
+}
+
+// GetMasterFolderName returns the master folder name.
+func (s *Service) GetMasterFolderName() string {
+	return s.masterFolderName
+}
+
+// ListMeetingDocuments finds documents matching the filename pattern.
+func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) ([]*models.Document, error) {
+	var keywordQuery string
+	if len(keywords) > 0 {
+		parts := make([]string, len(keywords))
+		for i, kw := range keywords {
+			parts[i] = fmt.Sprintf("name contains '%s'", kw)
+		}
+		keywordQuery = "(" + strings.Join(parts, " or ") + ") and "
+	}
+
+	query := keywordQuery + "mimeType = 'application/vnd.google-apps.document' and trashed = false"
+
+	var docs []*models.Document
+	pageToken := ""
+	for {
+		req := s.client.Files.List().
+			Q(query).
+			Fields("nextPageToken, files(id, name, mimeType, owners, parents, webViewLink)").
+			PageSize(100)
+
+		if pageToken != "" {
+			req.PageToken(pageToken)
+		}
+
+		result, err := req.Do()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list documents: %w", err)
+		}
+
+		for _, file := range result.Files {
+			doc, err := s.parseDocument(file)
+			if err != nil {
+				continue // Skip documents that don't match the pattern
+			}
+			docs = append(docs, doc)
+		}
+
+		pageToken = result.NextPageToken
+		if pageToken == "" {
+			break
+		}
+	}
+
+	return docs, nil
+}
+
+// parseDocument parses a Drive file into a Document model.
+func (s *Service) parseDocument(file *drive.File) (*models.Document, error) {
+	matches := s.filenamePattern.FindStringSubmatch(file.Name)
+	if matches == nil || len(matches) < 3 {
+		return nil, fmt.Errorf("filename does not match pattern: %s", file.Name)
+	}
+
+	meetingName := strings.TrimSpace(matches[1])
+	dateStr := matches[2]
+	date, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date in filename: %s", dateStr)
+	}
+
+	// Check ownership
+	isOwned := false
+	for _, owner := range file.Owners {
+		if owner.EmailAddress == s.currentUserEmail {
+			isOwned = true
+			break
+		}
+	}
+
+	parentID := ""
+	if len(file.Parents) > 0 {
+		parentID = file.Parents[0]
+	}
+
+	return &models.Document{
+		ID:             file.Id,
+		Name:           file.Name,
+		MeetingName:    meetingName,
+		Date:           date,
+		MimeType:       file.MimeType,
+		IsOwned:        isOwned,
+		ParentFolderID: parentID,
+		WebViewLink:    file.WebViewLink,
+	}, nil
+}
+
+// GetOrCreateMeetingFolder gets or creates a subfolder for a meeting topic.
+func (s *Service) GetOrCreateMeetingFolder(ctx context.Context, meetingName string) (*models.MeetingFolder, error) {
+	if s.masterFolderID == "" {
+		return nil, fmt.Errorf("master folder not set")
+	}
+
+	// Search for existing folder
+	query := fmt.Sprintf("name = '%s' and '%s' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+		meetingName, s.masterFolderID)
+	result, err := s.client.Files.List().Q(query).Fields("files(id, name)").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to search for folder: %w", err)
+	}
+
+	if len(result.Files) > 0 {
+		return &models.MeetingFolder{
+			ID:       result.Files[0].Id,
+			Name:     result.Files[0].Name,
+			ParentID: s.masterFolderID,
+			IsNew:    false, // Existing folder
+		}, nil
+	}
+
+	// Don't create in dry-run mode, but mark as new
+	if s.dryRun {
+		return &models.MeetingFolder{
+			ID:       "", // Empty ID signals this folder doesn't exist yet
+			Name:     meetingName,
+			ParentID: s.masterFolderID,
+			IsNew:    true, // Would be created
+		}, nil
+	}
+
+	// Create new folder
+	folder := &drive.File{
+		Name:     meetingName,
+		MimeType: "application/vnd.google-apps.folder",
+		Parents:  []string{s.masterFolderID},
+	}
+	created, err := s.client.Files.Create(folder).Fields("id, name").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create folder: %w", err)
+	}
+
+	return &models.MeetingFolder{
+		ID:       created.Id,
+		Name:     created.Name,
+		ParentID: s.masterFolderID,
+		IsNew:    true, // Just created
+	}, nil
+}
+
+// MoveDocument moves a document to a target folder.
+// Returns ActionResult describing what happened.
+func (s *Service) MoveDocument(ctx context.Context, docID, docName, currentParentID, targetFolderID, targetFolderName string) ActionResult {
+	// Check if already in target folder (idempotent)
+	if currentParentID == targetFolderID {
+		return ActionResult{
+			Action:  "move",
+			Skipped: true,
+			Reason:  "already in folder",
+			Details: fmt.Sprintf("%s is already in %s", docName, targetFolderName),
+		}
+	}
+
+	details := fmt.Sprintf("Move %s to %s/%s", docName, s.masterFolderName, targetFolderName)
+
+	if s.dryRun {
+		return ActionResult{
+			Action:  "move",
+			Skipped: false,
+			Reason:  "dry-run",
+			Details: details,
+		}
+	}
+
+	_, err := s.client.Files.Update(docID, nil).
+		AddParents(targetFolderID).
+		RemoveParents(currentParentID).
+		Do()
+	if err != nil {
+		return ActionResult{
+			Action:  "move",
+			Skipped: true,
+			Reason:  fmt.Sprintf("error: %v", err),
+			Details: details,
+		}
+	}
+
+	return ActionResult{
+		Action:  "move",
+		Skipped: false,
+		Details: details,
+	}
+}
+
+// ShortcutExists checks if a shortcut to the target file already exists in the folder.
+// Returns: exists, existingShortcutName, debugInfo, error
+func (s *Service) ShortcutExists(ctx context.Context, targetFileID, folderID string) (bool, string, string, error) {
+	query := fmt.Sprintf("'%s' in parents and mimeType = 'application/vnd.google-apps.shortcut' and trashed = false",
+		folderID)
+
+	result, err := s.client.Files.List().
+		Q(query).
+		Fields("files(id, name, shortcutDetails)").
+		Do()
+	if err != nil {
+		return false, "", "", fmt.Errorf("failed to check for existing shortcuts: %w", err)
+	}
+
+	// Build debug info showing all shortcuts found
+	var debugInfo string
+	if len(result.Files) > 0 {
+		debugInfo = fmt.Sprintf("Found %d shortcuts in folder. Looking for target: %s. ", len(result.Files), targetFileID)
+		for _, file := range result.Files {
+			if file.ShortcutDetails != nil {
+				debugInfo += fmt.Sprintf("[%s → %s] ", file.Name, file.ShortcutDetails.TargetId)
+			}
+		}
+	} else {
+		debugInfo = "No shortcuts found in folder"
+	}
+
+	for _, file := range result.Files {
+		if file.ShortcutDetails != nil && file.ShortcutDetails.TargetId == targetFileID {
+			return true, file.Name, debugInfo, nil
+		}
+	}
+
+	return false, "", debugInfo, nil
+}
+
+// CreateShortcut creates a shortcut to a file in the target folder.
+// If folderIsNew is true, skips the existence check (new folders can't have existing shortcuts).
+// Returns ActionResult describing what happened.
+func (s *Service) CreateShortcut(ctx context.Context, fileID, fileName, targetFolderID, targetFolderName string, folderIsNew bool) ActionResult {
+	// Skip existence check for new folders (they can't have existing shortcuts)
+	if !folderIsNew && targetFolderID != "" {
+		exists, existingName, debugInfo, err := s.ShortcutExists(ctx, fileID, targetFolderID)
+		if err != nil {
+			return ActionResult{
+				Action:  "shortcut",
+				Skipped: true,
+				Reason:  fmt.Sprintf("error: %v", err),
+				Details: fmt.Sprintf("Check shortcut for %s in %s", fileName, targetFolderName),
+			}
+		}
+
+		if exists {
+			return ActionResult{
+				Action:  "shortcut",
+				Skipped: true,
+				Reason:  "already exists",
+				Details: fmt.Sprintf("Shortcut '%s' to %s already exists in %s", existingName, fileName, targetFolderName),
+			}
+		}
+
+		// Not found - include debug info in dry-run output
+		if s.dryRun {
+			details := fmt.Sprintf("Create shortcut to %s in %s/%s\n      Debug: %s", fileName, s.masterFolderName, targetFolderName, debugInfo)
+			return ActionResult{
+				Action:  "shortcut",
+				Skipped: false,
+				Reason:  "dry-run",
+				Details: details,
+			}
+		}
+	}
+
+	details := fmt.Sprintf("Create shortcut to %s in %s/%s", fileName, s.masterFolderName, targetFolderName)
+
+	if s.dryRun {
+		return ActionResult{
+			Action:  "shortcut",
+			Skipped: false,
+			Reason:  "dry-run",
+			Details: details,
+		}
+	}
+
+	shortcut := &drive.File{
+		Name:     fileName,
+		MimeType: "application/vnd.google-apps.shortcut",
+		Parents:  []string{targetFolderID},
+		ShortcutDetails: &drive.FileShortcutDetails{
+			TargetId: fileID,
+		},
+	}
+	_, err := s.client.Files.Create(shortcut).Do()
+	if err != nil {
+		// Include file URL for requesting access if permission denied
+		fileURL := fmt.Sprintf("https://drive.google.com/file/d/%s/view", fileID)
+		reason := fmt.Sprintf("error: %v", err)
+		if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "forbidden") || strings.Contains(err.Error(), "permission") {
+			reason = fmt.Sprintf("Permission denied. Request access: %s", fileURL)
+		} else if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "notFound") {
+			reason = fmt.Sprintf("File not found or deleted: %s", fileURL)
+		}
+		return ActionResult{
+			Action:  "shortcut",
+			Skipped: true,
+			Reason:  reason,
+			Details: details,
+		}
+	}
+
+	return ActionResult{
+		Action:  "shortcut",
+		Skipped: false,
+		Details: details,
+	}
+}
+
+// GetFileName fetches the name of a file by its ID.
+func (s *Service) GetFileName(ctx context.Context, fileID string) (string, error) {
+	file, err := s.client.Files.Get(fileID).Fields("name").Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to get file: %w", err)
+	}
+	return file.Name, nil
+}
+
+// IsDocumentInFolder checks if a document is already in the specified folder.
+func (s *Service) IsDocumentInFolder(ctx context.Context, docID, folderID string) (bool, error) {
+	file, err := s.client.Files.Get(docID).Fields("parents").Do()
+	if err != nil {
+		return false, fmt.Errorf("failed to get document: %w", err)
+	}
+
+	for _, parent := range file.Parents {
+		if parent == folderID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// IsDryRun returns whether the service is in dry-run mode.
+func (s *Service) IsDryRun() bool {
+	return s.dryRun
+}

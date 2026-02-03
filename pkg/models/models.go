@@ -1,0 +1,113 @@
+// Package models provides data structures used throughout the application.
+package models
+
+import "time"
+
+// Document represents a Google Drive document with parsed meeting information.
+type Document struct {
+	// ID is the Google Drive file ID
+	ID string
+
+	// Name is the original file name
+	Name string
+
+	// MeetingName is the extracted meeting topic from the filename
+	MeetingName string
+
+	// Date is the parsed date from the filename
+	Date time.Time
+
+	// MimeType is the MIME type of the document
+	MimeType string
+
+	// IsOwned indicates if the current user owns this document
+	IsOwned bool
+
+	// ParentFolderID is the current parent folder ID
+	ParentFolderID string
+
+	// WebViewLink is the URL to view the document
+	WebViewLink string
+}
+
+// MeetingFolder represents a subfolder in the master folder for a meeting topic.
+type MeetingFolder struct {
+	// ID is the Google Drive folder ID
+	ID string
+
+	// Name is the folder name (meeting topic)
+	Name string
+
+	// ParentID is the parent folder ID (master folder)
+	ParentID string
+
+	// IsNew indicates this folder was just created (or would be in dry-run)
+	// Used to skip shortcut-exists checks since a new folder can't have existing shortcuts
+	IsNew bool
+
+	// DocumentCount is the number of documents in this folder
+	DocumentCount int
+}
+
+// ActionItem represents an action item extracted from a document checkbox.
+type ActionItem struct {
+	// DocumentID is the source Google Doc ID
+	DocumentID string
+
+	// DocumentName is the name of the source document
+	DocumentName string
+
+	// Text is the original checkbox text
+	Text string
+
+	// Assignee is the extracted person responsible
+	Assignee string
+
+	// DueDate is the extracted due date
+	DueDate time.Time
+
+	// LineIndex is the position in the document (for annotation)
+	LineIndex int
+
+	// IsProcessed indicates if this item has already been processed (has 🆔 emoji)
+	IsProcessed bool
+
+	// TaskID is the created Google Task ID (if created)
+	TaskID string
+}
+
+// CalendarEvent represents a Google Calendar event with attachments.
+type CalendarEvent struct {
+	// ID is the calendar event ID
+	ID string
+
+	// Title is the event title
+	Title string
+
+	// Start is the event start time
+	Start time.Time
+
+	// End is the event end time
+	End time.Time
+
+	// Description is the event description (may contain Drive links)
+	Description string
+
+	// Attachments are the file attachments from the event
+	Attachments []Attachment
+}
+
+// Attachment represents a file attached to a calendar event.
+type Attachment struct {
+	// FileID is the Google Drive file ID
+	FileID string
+
+	// Title is the attachment title
+	Title string
+
+	// MimeType is the MIME type
+	MimeType string
+
+	// FileURL is the URL to the file
+	FileURL string
+}

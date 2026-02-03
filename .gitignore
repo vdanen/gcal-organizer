@@ -1,0 +1,44 @@
+# Binaries
+gcal-organizer
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and credentials (IMPORTANT - never commit these!)
+.env
+.env.local
+.env.*.local
+credentials.json
+token.json
+*.pem
+*.key
+
+# Build artifacts
+dist/
+build/
+
+# Local configuration overrides
+config.local.yaml
