@@ -50,7 +50,7 @@ func DefaultConfig() *Config {
 		DaysToLookBack:   8,
 		FilenamePattern:  `(.+)\s*-\s*(\d{4}-\d{2}-\d{2})`,
 		FilenameKeywords: []string{"Notes", "Meeting"},
-		GeminiModel:      "gemini-1.5-flash",
+		GeminiModel:      "gemini-2.0-flash",
 		CredentialsFile:  home + "/.gcal-organizer/credentials.json",
 		TokenFile:        home + "/.gcal-organizer/token.json",
 	}

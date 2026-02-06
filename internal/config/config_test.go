@@ -16,8 +16,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("expected DaysToLookBack 8, got %d", cfg.DaysToLookBack)
 	}
 
-	if cfg.GeminiModel != "gemini-1.5-flash" {
-		t.Errorf("expected GeminiModel 'gemini-1.5-flash', got %s", cfg.GeminiModel)
+	if cfg.GeminiModel != "gemini-2.0-flash" {
+		t.Errorf("expected GeminiModel 'gemini-2.0-flash', got %s", cfg.GeminiModel)
 	}
 }
 

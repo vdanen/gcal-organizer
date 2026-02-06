@@ -14,6 +14,12 @@ import (
 	"google.golang.org/api/option"
 )
 
+// escapeQuery escapes special characters for Google Drive query strings.
+func escapeQuery(s string) string {
+	// Escape single quotes by replacing ' with \'
+	return strings.ReplaceAll(s, "'", "\\'")
+}
+
 // ActionResult describes the result of an operation.
 type ActionResult struct {
 	Action  string // "move", "shortcut", "skip", "create_folder"
@@ -26,14 +32,17 @@ type ActionResult struct {
 type Service struct {
 	client           *drive.Service
 	filenamePattern  *regexp.Regexp
+	fallbackPattern  *regexp.Regexp // For "Notes - [meeting name]" format
 	masterFolderID   string
 	masterFolderName string
+	rootFolderID     string // Actual ID of "My Drive" root folder
 	currentUserEmail string
 	dryRun           bool
+	verbose          bool
 }
 
 // NewService creates a new Drive service.
-func NewService(ctx context.Context, httpClient *http.Client, filenamePattern string, dryRun bool) (*Service, error) {
+func NewService(ctx context.Context, httpClient *http.Client, filenamePattern string, dryRun, verbose bool) (*Service, error) {
 	srv, err := drive.NewService(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Drive service: %w", err)
@@ -44,17 +53,30 @@ func NewService(ctx context.Context, httpClient *http.Client, filenamePattern st
 		return nil, fmt.Errorf("invalid filename pattern: %w", err)
 	}
 
+	// Fallback pattern for "Notes - [meeting name]" format (no date)
+	fallback := regexp.MustCompile(`^Notes\s*-\s*(.+)$`)
+
 	// Get current user email
 	about, err := srv.About.Get().Fields("user").Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current user: %w", err)
 	}
 
+	// Get the actual ID of the root folder ("My Drive")
+	// The API accepts "root" as an alias, but returns the actual ID
+	rootFile, err := srv.Files.Get("root").Fields("id").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get root folder ID: %w", err)
+	}
+
 	return &Service{
 		client:           srv,
 		filenamePattern:  pattern,
+		fallbackPattern:  fallback,
+		rootFolderID:     rootFile.Id,
 		currentUserEmail: about.User.EmailAddress,
 		dryRun:           dryRun,
+		verbose:          verbose,
 	}, nil
 }
 
@@ -80,6 +102,19 @@ func (s *Service) GetMasterFolderName() string {
 	return s.masterFolderName
 }
 
+// GetFileInfo retrieves basic file information by ID.
+func (s *Service) GetFileInfo(ctx context.Context, fileID string) (*models.Document, error) {
+	file, err := s.client.Files.Get(fileID).Fields("id, name, mimeType, owners, parents, webViewLink").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %w", err)
+	}
+	return &models.Document{
+		ID:          file.Id,
+		Name:        file.Name,
+		WebViewLink: file.WebViewLink,
+	}, nil
+}
+
 // ListMeetingDocuments finds documents matching the filename pattern.
 func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) ([]*models.Document, error) {
 	var keywordQuery string
@@ -93,7 +128,13 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 
 	query := keywordQuery + "mimeType = 'application/vnd.google-apps.document' and trashed = false"
 
+	if s.verbose {
+		fmt.Printf("      [DEBUG] Root folder ID: %s\n", s.rootFolderID)
+		fmt.Printf("      [DEBUG] Query: %s\n", query)
+	}
+
 	var docs []*models.Document
+	var scannedCount, fallbackCandidates int
 	pageToken := ""
 	for {
 		req := s.client.Files.List().
@@ -111,6 +152,17 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 		}
 
 		for _, file := range result.Files {
+			scannedCount++
+			// Check if this looks like a fallback candidate for verbose logging
+			if s.verbose && s.fallbackPattern.MatchString(file.Name) {
+				fallbackCandidates++
+				parentInfo := "no parent"
+				if len(file.Parents) > 0 {
+					parentInfo = file.Parents[0]
+				}
+				fmt.Printf("      [DEBUG] Fallback candidate: %s (parent: %s)\n", file.Name, parentInfo)
+			}
+			
 			doc, err := s.parseDocument(file)
 			if err != nil {
 				continue // Skip documents that don't match the pattern
@@ -124,21 +176,41 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 		}
 	}
 
+	if s.verbose {
+		fmt.Printf("      [DEBUG] Scanned %d documents, %d fallback candidates, %d matched\n", 
+			scannedCount, fallbackCandidates, len(docs))
+	}
+
 	return docs, nil
 }
 
 // parseDocument parses a Drive file into a Document model.
+// Tries the primary pattern first, then falls back to "Notes - [meeting name]" format.
 func (s *Service) parseDocument(file *drive.File) (*models.Document, error) {
-	matches := s.filenamePattern.FindStringSubmatch(file.Name)
-	if matches == nil || len(matches) < 3 {
-		return nil, fmt.Errorf("filename does not match pattern: %s", file.Name)
-	}
+	var meetingName string
+	var date time.Time
+	var isFallback bool
 
-	meetingName := strings.TrimSpace(matches[1])
-	dateStr := matches[2]
-	date, err := time.Parse("2006-01-02", dateStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid date in filename: %s", dateStr)
+	// Try primary pattern: "[meeting name] - [date]"
+	matches := s.filenamePattern.FindStringSubmatch(file.Name)
+	if matches != nil && len(matches) >= 3 {
+		meetingName = strings.TrimSpace(matches[1])
+		dateStr := matches[2]
+		parsedDate, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid date in filename: %s", dateStr)
+		}
+		date = parsedDate
+	} else {
+		// Try fallback pattern: "Notes - [meeting name]" (only for files in Drive root)
+		isInRoot := len(file.Parents) > 0 && file.Parents[0] == s.rootFolderID
+		fallbackMatches := s.fallbackPattern.FindStringSubmatch(file.Name)
+		if !isInRoot || fallbackMatches == nil || len(fallbackMatches) < 2 {
+			return nil, fmt.Errorf("filename does not match any pattern: %s", file.Name)
+		}
+		meetingName = strings.TrimSpace(fallbackMatches[1])
+		isFallback = true
+		// date remains zero value - no date in this format
 	}
 
 	// Check ownership
@@ -162,6 +234,7 @@ func (s *Service) parseDocument(file *drive.File) (*models.Document, error) {
 		Date:           date,
 		MimeType:       file.MimeType,
 		IsOwned:        isOwned,
+		IsFallback:     isFallback,
 		ParentFolderID: parentID,
 		WebViewLink:    file.WebViewLink,
 	}, nil
@@ -173,9 +246,9 @@ func (s *Service) GetOrCreateMeetingFolder(ctx context.Context, meetingName stri
 		return nil, fmt.Errorf("master folder not set")
 	}
 
-	// Search for existing folder
+	// Search for existing folder (escape special characters in name)
 	query := fmt.Sprintf("name = '%s' and '%s' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-		meetingName, s.masterFolderID)
+		escapeQuery(meetingName), s.masterFolderID)
 	result, err := s.client.Files.List().Q(query).Fields("files(id, name)").Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to search for folder: %w", err)
@@ -408,3 +481,56 @@ func (s *Service) IsDocumentInFolder(ctx context.Context, docID, folderID string
 func (s *Service) IsDryRun() bool {
 	return s.dryRun
 }
+
+// FindShortcutToFile finds a shortcut in a folder that points to a specific file.
+// Returns the shortcut ID if found, empty string otherwise.
+func (s *Service) FindShortcutToFile(ctx context.Context, targetFileID, folderID string) (string, error) {
+	query := fmt.Sprintf("'%s' in parents and mimeType = 'application/vnd.google-apps.shortcut' and trashed = false",
+		folderID)
+
+	result, err := s.client.Files.List().
+		Q(query).
+		Fields("files(id, shortcutDetails)").
+		Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to search for shortcuts: %w", err)
+	}
+
+	for _, file := range result.Files {
+		if file.ShortcutDetails != nil && file.ShortcutDetails.TargetId == targetFileID {
+			return file.Id, nil
+		}
+	}
+
+	return "", nil
+}
+
+// TrashFile moves a file to trash.
+// Returns ActionResult describing what happened.
+func (s *Service) TrashFile(ctx context.Context, fileID, description string) ActionResult {
+	if s.dryRun {
+		return ActionResult{
+			Action:  "trash",
+			Skipped: false,
+			Reason:  "dry-run",
+			Details: description,
+		}
+	}
+
+	_, err := s.client.Files.Update(fileID, &drive.File{Trashed: true}).Do()
+	if err != nil {
+		return ActionResult{
+			Action:  "trash",
+			Skipped: true,
+			Reason:  fmt.Sprintf("error: %v", err),
+			Details: description,
+		}
+	}
+
+	return ActionResult{
+		Action:  "trash",
+		Skipped: false,
+		Details: description,
+	}
+}
+

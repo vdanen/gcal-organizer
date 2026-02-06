@@ -4,6 +4,7 @@ package organizer
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jflowers/gcal-organizer/internal/calendar"
 	"github.com/jflowers/gcal-organizer/internal/config"
@@ -16,14 +17,15 @@ import (
 
 // Stats tracks operation counts for summary reporting.
 type Stats struct {
-	DocumentsFound   int
-	DocumentsMoved   int
-	ShortcutsCreated int
-	EventsProcessed  int
-	EventsWithAttach int
-	TasksCreated     int
-	ItemsSkipped     int
-	Errors           int
+	DocumentsFound    int
+	DocumentsMoved    int
+	ShortcutsCreated  int
+	ShortcutsTrashed  int
+	EventsProcessed   int
+	EventsWithAttach  int
+	TasksCreated      int
+	ItemsSkipped      int
+	Errors            int
 }
 
 // Organizer orchestrates all the services.
@@ -104,6 +106,9 @@ func (o *Organizer) printSummary() {
 	o.log(fmt.Sprintf("   📄 Documents found:        %d", o.stats.DocumentsFound))
 	o.log(fmt.Sprintf("   📂 Documents moved:        %d", o.stats.DocumentsMoved))
 	o.log(fmt.Sprintf("   🔗 Shortcuts created:      %d", o.stats.ShortcutsCreated))
+	if o.stats.ShortcutsTrashed > 0 {
+		o.log(fmt.Sprintf("   🗑️  Shortcuts trashed:      %d", o.stats.ShortcutsTrashed))
+	}
 	o.log(fmt.Sprintf("   📅 Events processed:       %d", o.stats.EventsProcessed))
 	o.log(fmt.Sprintf("   📎 Events with attachments: %d", o.stats.EventsWithAttach))
 	o.log(fmt.Sprintf("   ✅ Tasks created:          %d", o.stats.TasksCreated))
@@ -147,6 +152,21 @@ func (o *Organizer) OrganizeDocuments(ctx context.Context) error {
 
 		var result drive.ActionResult
 		if doc.IsOwned {
+			// For owned fallback files, also clean up any redundant shortcut
+			if doc.IsFallback && folder.ID != "" {
+				shortcutID, err := o.drive.FindShortcutToFile(ctx, doc.ID, folder.ID)
+				if err != nil {
+					o.logVerbose(fmt.Sprintf("   ⚠️  Could not check for shortcuts: %v", err))
+				} else if shortcutID != "" {
+					// Found a shortcut pointing to this file - trash it
+					trashResult := o.drive.TrashFile(ctx, shortcutID, 
+						fmt.Sprintf("Trash redundant shortcut to %s (file being moved)", doc.Name))
+					if !trashResult.Skipped || trashResult.Reason == "dry-run" {
+						o.stats.ShortcutsTrashed++
+						o.log(fmt.Sprintf("   🗑️  %s", trashResult.Details))
+					}
+				}
+			}
 			result = o.drive.MoveDocument(ctx, doc.ID, doc.Name, doc.ParentFolderID, folder.ID, folder.Name)
 		} else {
 			result = o.drive.CreateShortcut(ctx, doc.ID, doc.Name, folder.ID, folder.Name, folder.IsNew)
@@ -283,6 +303,30 @@ func (o *Organizer) ExtractAndCreateTasks(ctx context.Context) error {
 	return nil
 }
 
+// ProcessSingleDocument extracts action items from a specific document by ID.
+func (o *Organizer) ProcessSingleDocument(ctx context.Context, docID string) error {
+	// Create a minimal document struct for processing
+	doc := &models.Document{
+		ID:   docID,
+		Name: docID, // Will be updated if we can get file info
+	}
+
+	// Try to get the actual document name from Drive
+	fileInfo, err := o.drive.GetFileInfo(ctx, docID)
+	if err == nil && fileInfo != nil {
+		doc.Name = fileInfo.Name
+	}
+
+	o.log(fmt.Sprintf("   Processing document: %s", doc.Name))
+	o.log("")
+
+	if err := o.processDocumentForTasks(ctx, doc); err != nil {
+		return fmt.Errorf("failed to process document: %w", err)
+	}
+
+	return nil
+}
+
 // processDocumentForTasks processes a single document for action items.
 func (o *Organizer) processDocumentForTasks(ctx context.Context, doc *models.Document) error {
 	checkboxes, err := o.docs.ExtractCheckboxItems(ctx, doc.ID)
@@ -317,6 +361,13 @@ func (o *Organizer) processDocumentForTasks(ctx context.Context, doc *models.Doc
 			continue
 		}
 
+		// Only create tasks for the current user (Jay Flowers)
+		if !strings.Contains(strings.ToLower(response.Assignee), "jay") {
+			o.stats.ItemsSkipped++
+			o.logVerbose(fmt.Sprintf("      ⏭️  Assigned to others: %s -> %s", truncate(cb.Text, 30), response.Assignee))
+			continue
+		}
+
 		dueDate, _ := gemini.ParseDate(response.Date)
 		dateStr := response.Date
 		if dateStr == "" {
@@ -334,11 +385,7 @@ func (o *Organizer) processDocumentForTasks(ctx context.Context, doc *models.Doc
 
 		if o.drive.IsDryRun() {
 			o.stats.TasksCreated++
-			o.log(fmt.Sprintf("   ✅ TASK: %s", truncate(cb.Text, 50)))
-			o.log(fmt.Sprintf("      Document: %s", doc.Name))
-			o.log(fmt.Sprintf("      Assignee: %s", response.Assignee))
-			o.log(fmt.Sprintf("      Due date: %s", dateStr))
-			o.log("")
+			o.log(fmt.Sprintf("   ✓ Created task: %s -> %s", truncate(cb.Text, 30), response.Assignee))
 			continue
 		}
 
@@ -352,12 +399,7 @@ func (o *Organizer) processDocumentForTasks(ctx context.Context, doc *models.Doc
 		actionItem.TaskID = taskID
 		o.stats.TasksCreated++
 
-		// Annotate the document
-		if err := o.docs.AnnotateActionItem(ctx, doc.ID, actionItem); err != nil {
-			o.log(fmt.Sprintf("      ⚠️  Failed to annotate document: %v", err))
-			o.stats.Errors++
-		}
-
+		// Note: We no longer annotate the document - just create the task
 		o.log(fmt.Sprintf("   ✓ Created task: %s -> %s", truncate(cb.Text, 30), response.Assignee))
 	}
 

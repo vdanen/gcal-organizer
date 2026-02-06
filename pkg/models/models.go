@@ -23,6 +23,9 @@ type Document struct {
 	// IsOwned indicates if the current user owns this document
 	IsOwned bool
 
+	// IsFallback indicates this was parsed via the fallback pattern (Notes - [name])
+	IsFallback bool
+
 	// ParentFolderID is the current parent folder ID
 	ParentFolderID string
 

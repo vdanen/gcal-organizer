@@ -63,37 +63,76 @@ func (s *Service) GetDocument(ctx context.Context, docID string) (*docs.Document
 	return doc, nil
 }
 
-// ExtractCheckboxItems finds all checkbox list items in a document.
+// SuggestedNextStepsHeading is the section heading to look for.
+const SuggestedNextStepsHeading = "Suggested next steps"
+
+// NotesTabName is the tab name to target.
+const NotesTabName = "Notes"
+
+// ExtractCheckboxItems finds checkbox items in the "Suggested next steps" section of the "Notes" tab.
 func (s *Service) ExtractCheckboxItems(ctx context.Context, docID string) ([]*CheckboxItem, error) {
 	doc, err := s.GetDocument(ctx, docID)
 	if err != nil {
 		return nil, err
 	}
 
-	var items []*CheckboxItem
+	// Find the content to process - either from the "Notes" tab or the main body
+	var content []*docs.StructuralElement
 
-	// Iterate through document content
-	for _, elem := range doc.Body.Content {
+	if len(doc.Tabs) > 0 {
+		// Multi-tab document - look for "Notes" tab
+		for _, tab := range doc.Tabs {
+			if tab.TabProperties != nil && tab.TabProperties.Title == NotesTabName {
+				if tab.DocumentTab != nil && tab.DocumentTab.Body != nil {
+					content = tab.DocumentTab.Body.Content
+				}
+				break
+			}
+		}
+		if content == nil {
+			// Notes tab not found
+			return nil, nil
+		}
+	} else if doc.Body != nil {
+		// Single-tab or legacy document - use main body
+		content = doc.Body.Content
+	} else {
+		return nil, nil
+	}
+
+	return s.extractItemsFromSection(content)
+}
+
+// extractItemsFromSection extracts checkbox items from the "Suggested next steps" section.
+func (s *Service) extractItemsFromSection(content []*docs.StructuralElement) ([]*CheckboxItem, error) {
+	var items []*CheckboxItem
+	inSuggestedSection := false
+
+	for _, elem := range content {
 		if elem.Paragraph == nil {
 			continue
 		}
 
 		para := elem.Paragraph
 
-		// Check if this is a list item with checkbox
+		// Check if this is the "Suggested next steps" heading
+		paraText := extractParagraphText(para)
+		if strings.Contains(strings.ToLower(paraText), strings.ToLower(SuggestedNextStepsHeading)) {
+			inSuggestedSection = true
+			continue
+		}
+
+		// If we haven't found the section yet, skip
+		if !inSuggestedSection {
+			continue
+		}
+
+		// Check if this is a list item (bullet or checkbox)
 		if para.Bullet == nil {
 			continue
 		}
 
-		// Extract text from paragraph
-		var text strings.Builder
-		for _, textElem := range para.Elements {
-			if textElem.TextRun != nil {
-				text.WriteString(textElem.TextRun.Content)
-			}
-		}
-
-		content := strings.TrimSpace(text.String())
+		content := strings.TrimSpace(paraText)
 		if content == "" {
 			continue
 		}
@@ -101,21 +140,27 @@ func (s *Service) ExtractCheckboxItems(ctx context.Context, docID string) ([]*Ch
 		// Check if already processed
 		isProcessed := strings.Contains(content, ProcessedEmoji)
 
-		// Determine if it's a checkbox by checking the list properties
-		// In Google Docs API, checkboxes are represented as list items
-		// We'll consider any list item as a potential action item
-		isChecked := false // Would need to check nesting level for actual checkbox state
-
 		items = append(items, &CheckboxItem{
 			Text:        content,
 			StartIndex:  elem.StartIndex,
 			EndIndex:    elem.EndIndex,
-			IsChecked:   isChecked,
+			IsChecked:   false,
 			IsProcessed: isProcessed,
 		})
 	}
 
 	return items, nil
+}
+
+// extractParagraphText extracts all text from a paragraph.
+func extractParagraphText(para *docs.Paragraph) string {
+	var text strings.Builder
+	for _, textElem := range para.Elements {
+		if textElem.TextRun != nil {
+			text.WriteString(textElem.TextRun.Content)
+		}
+	}
+	return strings.TrimSpace(text.String())
 }
 
 // AnnotateActionItem adds the processed marker to an action item in the document.
