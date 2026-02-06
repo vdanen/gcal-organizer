@@ -67,6 +67,12 @@ Required scopes:
 
 ## Development Workflow
 
+### Incremental Implementation
+1. **Test-Driven**: Write tests before implementation
+2. **API-First**: Build API integrations first, fallback strategies second
+3. **Checkpoint-First**: Implement resume capability early for long-running operations
+4. **Security Review**: All credential handling reviewed before merge
+
 ### Code Review Requirements
 - All changes via feature branches
 - Clear commit messages following conventional commits
@@ -79,11 +85,30 @@ Required scopes:
 - `go vet ./...` - must have no warnings
 - `gofmt` - code must be formatted
 
+## Documentation Requirements
+
+### Documentation Maintenance
+- **README.md** MUST be kept up to date with all user-facing changes
+- Any change to CLI flags, commands, or configuration options MUST be reflected in README.md
+- New features MUST include documentation before being considered complete
+- Breaking changes MUST be clearly documented with migration instructions
+
+### Documentation Review Checklist
+When making changes, review and update as needed:
+1. **README.md** - Usage examples, flags, configuration options
+2. **AGENTS.md** - Build commands, project structure if changed
+3. **Constitution** - If architectural decisions or core principles change
+4. **Config examples** - If configuration schema changes
+
 ## Governance
 
 This constitution guides all development decisions for the GCal Organizer CLI.
+- **Constitution supersedes all other implementation decisions**
+- Changes to core strategies require documentation and testing
+- Security-related changes require explicit review
+- **All feature changes require documentation review before commit**
 - Amendments require documentation and justification
 - Trade-offs against principles must be explicitly noted
 - Simplicity preferred over feature creep (YAGNI)
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-01 | **Last Amended**: 2026-02-01
+**Version**: 1.1.0 | **Ratified**: 2026-02-01 | **Last Amended**: 2026-02-06
