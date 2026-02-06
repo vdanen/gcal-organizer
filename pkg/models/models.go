@@ -98,6 +98,9 @@ type CalendarEvent struct {
 
 	// Attachments are the file attachments from the event
 	Attachments []Attachment
+
+	// Attendees are the event attendees
+	Attendees []Attendee
 }
 
 // Attachment represents a file attached to a calendar event.
@@ -113,4 +116,19 @@ type Attachment struct {
 
 	// FileURL is the URL to the file
 	FileURL string
+}
+
+// Attendee represents a calendar event attendee.
+type Attendee struct {
+	// Email is the attendee's email address
+	Email string
+
+	// DisplayName is the attendee's display name (if available)
+	DisplayName string
+
+	// IsSelf indicates if this attendee is the current user
+	IsSelf bool
+
+	// IsOrganizer indicates if this attendee is the event organizer
+	IsOrganizer bool
 }

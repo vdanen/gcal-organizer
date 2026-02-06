@@ -120,6 +120,17 @@ func (s *Service) parseEvent(item *calendar.Event) (*models.CalendarEvent, error
 	descAttachments := s.extractDriveLinks(item.Description)
 	attachments = append(attachments, descAttachments...)
 
+	// Extract attendees
+	var attendees []models.Attendee
+	for _, att := range item.Attendees {
+		attendees = append(attendees, models.Attendee{
+			Email:       att.Email,
+			DisplayName: att.DisplayName,
+			IsSelf:      att.Self,
+			IsOrganizer: att.Organizer,
+		})
+	}
+
 	return &models.CalendarEvent{
 		ID:          item.Id,
 		Title:       item.Summary,
@@ -127,6 +138,7 @@ func (s *Service) parseEvent(item *calendar.Event) (*models.CalendarEvent, error
 		End:         end,
 		Description: item.Description,
 		Attachments: attachments,
+		Attendees:   attendees,
 	}, nil
 }
 

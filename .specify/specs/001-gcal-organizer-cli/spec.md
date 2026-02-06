@@ -10,8 +10,10 @@
 A command-line tool that automates the lifecycle of meeting notes by:
 1. Organizing meeting documents into a structured Drive folder hierarchy
 2. Syncing calendar event attachments to corresponding meeting folders
-3. Using Gemini AI to extract action items from checkboxes in Google Docs
-4. Creating Google Tasks from extracted action items
+3. Sharing meeting folders with calendar event attendees
+
+> [!NOTE]
+> Task extraction and assignment is handled separately via browser automation (see spec 002).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -51,43 +53,15 @@ As a user, I want the tool to scan my recent calendar events and sync any attach
 
 ---
 
-### User Story 3 - Extract Action Items with AI (Priority: P2)
-
-As a user, I want the tool to scan Google Docs for checkbox list items and use Gemini AI to extract assignees and due dates.
-
-**Why this priority**: Core AI-powered automation feature that differentiates this tool.
-
-**Independent Test**: Can be tested with a sample document containing checkboxes with task descriptions.
-
-**Acceptance Scenarios**:
-
-1. **Given** a Google Doc with unchecked checkbox item "[ ] John to review budget by Friday", **When** I run `gcal-organizer extract-tasks --doc <docId>`, **Then** Gemini returns JSON with `{"assignee": "John", "date": "2026-02-07"}`.
-
-2. **Given** a checkbox item already marked with 🆔 emoji, **When** I run `gcal-organizer extract-tasks`, **Then** the item is skipped (already processed).
-
-3. **Given** a checkbox item with ambiguous text "[ ] Do the thing", **When** Gemini cannot determine assignee, **Then** the item is logged but no task is created.
+> [!NOTE]
+> **Task extraction and assignment moved to spec 002** (Browser Automation)
+> The `assign-tasks` command uses Gemini AI + Playwright to assign tasks via native Google Docs UI.
 
 ---
 
-### User Story 4 - Create Google Tasks (Priority: P3)
+### User Story 3 - Run Full Workflow (Priority: P1)
 
-As a user, I want extracted action items to be automatically created as Google Tasks with proper titles and due dates.
-
-**Why this priority**: Completes the automation loop but depends on successful extraction.
-
-**Independent Test**: Can be tested by mocking Gemini response and verifying Task creation.
-
-**Acceptance Scenarios**:
-
-1. **Given** Gemini returns `{"assignee": "John", "date": "2026-02-07"}` for a checkbox item, **When** processing completes, **Then** a Google Task is created with title "[Doc Name] Review budget" and due date 2026-02-07.
-
-2. **Given** a task is successfully created, **When** the doc is updated, **Then** the checkbox line is annotated with `👤 John 📅 2026-02-07 🆔`.
-
----
-
-### User Story 5 - Run Full Workflow (Priority: P1)
-
-As a user, I want a single command to run the complete workflow: organize, sync, extract, and create tasks.
+As a user, I want a single command to run the complete workflow: organize, sync, and share folders.
 
 **Why this priority**: Primary user interaction mode for daily use.
 
@@ -101,57 +75,102 @@ As a user, I want a single command to run the complete workflow: organize, sync,
 
 ---
 
+### User Story 4 - Share Folder with Calendar Attendees (Priority: P2)
+
+As a user, I want my meeting folders to be automatically shared with all attendees from the corresponding calendar event so they can access the notes and attachments.
+
+**Why this priority**: Enhances collaboration by ensuring all meeting participants have access to meeting materials.
+
+**Independent Test**: Can be tested by creating a meeting folder and verifying all calendar event attendees receive view access.
+
+**Acceptance Scenarios**:
+
+1. **Given** a meeting folder "Team Standup" exists and a calendar event "Team Standup - 2026-02-06" has attendees alice@example.com and bob@example.com, **When** I run `gcal-organizer organize` or `gcal-organizer sync-calendar`, **Then** the folder is shared with alice@example.com and bob@example.com with view access.
+
+2. **Given** an attendee already has access to the folder, **When** I run the organizer, **Then** the sharing is skipped (idempotent).
+
+3. **Given** `--dry-run` flag is provided, **When** I run the command, **Then** output shows "Would share [folder] with [email]" without actually sharing.
+
+4. **Given** an attendee email fails validation (e.g., external domain blocked by org policy), **When** sharing fails, **Then** the error is logged and processing continues.
+
+---
+
+### User Story 5 - Authentication Management (Priority: P1)
+
+As a user, I want to authenticate with Google Workspace APIs via OAuth2 and check my authentication status.
+
+**Why this priority**: Required before any other functionality works.
+
+**Independent Test**: Can be tested by running `auth login` and verifying token is saved.
+
+**Acceptance Scenarios**:
+
+1. **Given** no token exists, **When** I run `gcal-organizer auth login`, **Then** a browser opens for OAuth flow and token is saved locally.
+
+2. **Given** a valid token exists, **When** I run `gcal-organizer auth status`, **Then** output shows "✅ OAuth token found (authenticated)".
+
+3. **Given** an expired token, **When** I run `gcal-organizer auth status`, **Then** output shows "⚠️ Token expired" with instructions to re-authenticate.
+
+---
+
+### User Story 6 - Configuration Management (Priority: P3)
+
+As a user, I want to view my current configuration to verify settings are correct.
+
+**Why this priority**: Troubleshooting aid, not required for core functionality.
+
+**Independent Test**: Run `config show` and verify output matches environment.
+
+**Acceptance Scenarios**:
+
+1. **Given** environment variables are set, **When** I run `gcal-organizer config show`, **Then** output displays all configuration values.
+
+2. **Given** credentials file is missing, **When** I run `gcal-organizer config show`, **Then** output shows warning with setup instructions.
+
+---
+
 ### Edge Cases
 
-- What happens when the GCP API key is invalid or missing?
-  → Clear error message with setup instructions
 - What happens when OAuth token is expired?
   → Prompt for re-authentication or provide refresh instructions
 - What happens when rate limits are exceeded?
   → Implement exponential backoff with clear status messages
 - What happens when a document is trashed during processing?
   → Log the error and continue with remaining documents
-- What happens when Gemini returns malformed JSON?
-  → Parse gracefully, log the error, skip the item
+- What happens when moving an owned document that has an existing shortcut in the target folder?
+  → The redundant shortcut is trashed to avoid duplicates
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: System MUST authenticate with Google Workspace APIs using OAuth2 (Drive, Docs, Calendar, Tasks)
-- **FR-002**: System MUST authenticate with Gemini API using GCP API key
-- **FR-003**: System MUST parse document names using configurable regex pattern (default: `(.+) - (\d{4}-\d{2}-\d{2})`)
-- **FR-004**: System MUST create subfolders based on extracted meeting names
-- **FR-005**: System MUST move owned documents and create shortcuts for non-owned documents
-- **FR-006**: System MUST scan calendar events within configurable lookback period (default: 8 days)
-- **FR-007**: System MUST detect Drive attachments via Calendar API and URLs in event descriptions
-- **FR-008**: System MUST identify checkbox list items in Google Docs
-- **FR-009**: System MUST skip checkbox items already containing 🆔 emoji
-- **FR-010**: System MUST send checkbox text to Gemini and parse JSON response for assignee and date
-- **FR-011**: System MUST create Google Tasks with formatted titles and due dates
-- **FR-012**: System MUST annotate processed checkbox items with `👤 Name 📅 Date 🆔`
-- **FR-013**: System MUST support `--dry-run` mode with detailed output showing:
-  - **FR-013a**: For document organization: file name, source location, target folder, and action (move vs shortcut)
-  - **FR-013b**: For calendar sync: event title, attachment name, target folder for shortcut
-  - **FR-013c**: For task extraction: checkbox text, extracted assignee, extracted date, target document
-  - **FR-013d**: Summary counts at the end (documents processed, shortcuts to create, tasks to create)
-- **FR-014**: System MUST support `--verbose` mode for detailed logging
+- **FR-001**: System MUST authenticate with Google Workspace APIs using OAuth2 (Drive, Docs, Calendar)
+- **FR-002**: System MUST parse document names using configurable regex pattern (default: `(.+) - (\d{4}-\d{2}-\d{2})`)
+- **FR-003**: System MUST create subfolders based on extracted meeting names
+- **FR-004**: System MUST move owned documents and create shortcuts for non-owned documents
+- **FR-005**: System MUST scan calendar events within configurable lookback period (default: 8 days)
+- **FR-006**: System MUST detect Drive attachments via Calendar API and URLs in event descriptions
+- **FR-007**: System MUST share meeting folders with all attendees from the corresponding calendar event (view access)
+- **FR-008**: System MUST skip sharing for attendees who already have access (idempotent)
+- **FR-009**: System MUST support `--dry-run` mode with detailed output showing:
+  - **FR-009a**: For document organization: file name, source location, target folder, and action (move vs shortcut)
+  - **FR-009b**: For calendar sync: event title, attachment name, target folder for shortcut
+  - **FR-009c**: For folder sharing: folder name, attendee emails to share with
+  - **FR-009d**: Summary counts at the end (documents processed, shortcuts created, shares added)
+- **FR-010**: System MUST support `--verbose` mode for detailed logging
 
 ### Configuration Requirements
 
 - **CR-001**: `GCAL_MASTER_FOLDER_NAME` - Name of the master folder (string)
 - **CR-002**: `GCAL_DAYS_TO_LOOK_BACK` - Calendar lookback period (integer, default: 8)
-- **CR-003**: `GEMINI_API_KEY` - GCP API key for Gemini (string, required)
-- **CR-004**: `GCAL_FILENAME_KEYWORDS` - Keywords to filter documents (comma-separated list)
-- **CR-005**: `GCAL_FILENAME_PATTERN` - Regex for parsing document names (string)
+- **CR-003**: `GCAL_FILENAME_KEYWORDS` - Keywords to filter documents (comma-separated list)
+- **CR-004**: `GCAL_FILENAME_PATTERN` - Regex for parsing document names (string)
 
 ### Key Entities
 
 - **Meeting Folder**: A subfolder within the Master Folder, named after a meeting topic
 - **Meeting Document**: A Google Doc matching the naming pattern
-- **Calendar Event**: A Google Calendar event with potential attachments
-- **Action Item**: A checkbox item in a document with extractable assignee/date
-- **Task**: A Google Task created from an action item
+- **Calendar Event**: A Google Calendar event with potential attachments and attendees
 
 ## Success Criteria *(mandatory)*
 
@@ -159,10 +178,9 @@ As a user, I want a single command to run the complete workflow: organize, sync,
 
 - **SC-001**: CLI responds to all commands within 2 seconds (excluding API calls)
 - **SC-002**: Successfully organizes 100+ documents without errors in a single run
-- **SC-003**: Gemini extraction accuracy > 85% for well-formatted checkbox items
-- **SC-004**: All operations are idempotent (safe to run multiple times)
-- **SC-005**: Error messages are actionable (include next steps or troubleshooting hints)
-- **SC-006**: `--dry-run` mode produces identical log output without side effects
+- **SC-003**: All operations are idempotent (safe to run multiple times)
+- **SC-004**: Error messages are actionable (include next steps or troubleshooting hints)
+- **SC-005**: `--dry-run` mode produces identical log output without side effects
 
 ## Clarifications
 

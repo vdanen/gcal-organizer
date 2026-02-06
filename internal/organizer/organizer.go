@@ -4,15 +4,10 @@ package organizer
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jflowers/gcal-organizer/internal/calendar"
 	"github.com/jflowers/gcal-organizer/internal/config"
-	"github.com/jflowers/gcal-organizer/internal/docs"
 	"github.com/jflowers/gcal-organizer/internal/drive"
-	"github.com/jflowers/gcal-organizer/internal/gemini"
-	"github.com/jflowers/gcal-organizer/internal/tasks"
-	"github.com/jflowers/gcal-organizer/pkg/models"
 )
 
 // Stats tracks operation counts for summary reporting.
@@ -23,8 +18,7 @@ type Stats struct {
 	ShortcutsTrashed  int
 	EventsProcessed   int
 	EventsWithAttach  int
-	TasksCreated      int
-	ItemsSkipped      int
+	FoldersShared     int
 	Errors            int
 }
 
@@ -32,24 +26,18 @@ type Stats struct {
 type Organizer struct {
 	config   *config.Config
 	drive    *drive.Service
-	docs     *docs.Service
 	calendar *calendar.Service
-	tasks    *tasks.Service
-	gemini   *gemini.Client
 
 	verbose bool
 	stats   Stats
 }
 
 // New creates a new Organizer with all services initialized.
-func New(ctx context.Context, cfg *config.Config, driveSvc *drive.Service, docsSvc *docs.Service, calSvc *calendar.Service, tasksSvc *tasks.Service, geminiClient *gemini.Client) *Organizer {
+func New(cfg *config.Config, driveSvc *drive.Service, calSvc *calendar.Service) *Organizer {
 	return &Organizer{
 		config:   cfg,
 		drive:    driveSvc,
-		docs:     docsSvc,
 		calendar: calSvc,
-		tasks:    tasksSvc,
-		gemini:   geminiClient,
 		verbose:  cfg.Verbose,
 	}
 }
@@ -80,14 +68,6 @@ func (o *Organizer) RunFullWorkflow(ctx context.Context) error {
 	}
 	o.log("")
 
-	// Step 3: Extract and create tasks
-	o.log("🤖 STEP 3: Extracting Action Items")
-	o.log("───────────────────────────────────────────────────────────")
-	if err := o.ExtractAndCreateTasks(ctx); err != nil {
-		return fmt.Errorf("extract tasks failed: %w", err)
-	}
-	o.log("")
-
 	// Print summary
 	o.printSummary()
 
@@ -111,8 +91,9 @@ func (o *Organizer) printSummary() {
 	}
 	o.log(fmt.Sprintf("   📅 Events processed:       %d", o.stats.EventsProcessed))
 	o.log(fmt.Sprintf("   📎 Events with attachments: %d", o.stats.EventsWithAttach))
-	o.log(fmt.Sprintf("   ✅ Tasks created:          %d", o.stats.TasksCreated))
-	o.log(fmt.Sprintf("   ⏭️  Items skipped:          %d", o.stats.ItemsSkipped))
+	if o.stats.FoldersShared > 0 {
+		o.log(fmt.Sprintf("   👥 Folders shared:          %d", o.stats.FoldersShared))
+	}
 	if o.stats.Errors > 0 {
 		o.log(fmt.Sprintf("   ⚠️  Errors encountered:     %d", o.stats.Errors))
 	}
@@ -223,6 +204,24 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 			result := o.drive.CreateShortcut(ctx, att.FileID, title, folder.ID, folder.Name, folder.IsNew)
 			o.logCalendarAction(result, event.Title, event.Start.Format("2006-01-02"), title)
 		}
+
+		// Share folder with attendees
+		for _, attendee := range event.Attendees {
+			// Skip self and empty emails
+			if attendee.IsSelf || attendee.Email == "" {
+				continue
+			}
+
+			result := o.drive.ShareFolder(ctx, folder.ID, folder.Name, attendee.Email)
+			if !result.Skipped || result.Reason == "dry-run" {
+				o.stats.FoldersShared++
+				o.log(fmt.Sprintf("   👥 %s", result.Details))
+			} else if result.Reason != "already shared" {
+				// Log errors but not "already shared" skips
+				o.log(fmt.Sprintf("   ⚠️  %s", result.Details))
+				o.stats.Errors++
+			}
+		}
 	}
 
 	return nil
@@ -232,7 +231,6 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 func (o *Organizer) logActionResult(result drive.ActionResult, isMove bool) {
 	if result.Skipped {
 		if result.Reason == "already exists" || result.Reason == "already in folder" {
-			o.stats.ItemsSkipped++
 			o.logVerbose(fmt.Sprintf("   ⏭️  SKIP: %s", result.Details))
 		} else if result.Reason != "" && result.Reason != "dry-run" {
 			o.stats.Errors++
@@ -263,7 +261,6 @@ func (o *Organizer) logCalendarAction(result drive.ActionResult, eventTitle, eve
 
 	if result.Skipped {
 		if result.Reason == "already exists" {
-			o.stats.ItemsSkipped++
 			o.logVerbose(fmt.Sprintf("   ⏭️  SKIP [%s]: %s", eventContext, result.Details))
 		} else if result.Reason != "" && result.Reason != "dry-run" {
 			o.stats.Errors++
@@ -282,130 +279,6 @@ func (o *Organizer) logCalendarAction(result drive.ActionResult, eventTitle, eve
 	}
 }
 
-// ExtractAndCreateTasks extracts action items from documents and creates tasks.
-func (o *Organizer) ExtractAndCreateTasks(ctx context.Context) error {
-	// Get organized documents
-	documents, err := o.drive.ListMeetingDocuments(ctx, o.config.FilenameKeywords)
-	if err != nil {
-		return err
-	}
-
-	o.log(fmt.Sprintf("   Scanning %d documents for action items...", len(documents)))
-	o.log("")
-
-	for _, doc := range documents {
-		if err := o.processDocumentForTasks(ctx, doc); err != nil {
-			o.log(fmt.Sprintf("   ⚠️  Failed to process %s: %v", doc.Name, err))
-			o.stats.Errors++
-		}
-	}
-
-	return nil
-}
-
-// ProcessSingleDocument extracts action items from a specific document by ID.
-func (o *Organizer) ProcessSingleDocument(ctx context.Context, docID string) error {
-	// Create a minimal document struct for processing
-	doc := &models.Document{
-		ID:   docID,
-		Name: docID, // Will be updated if we can get file info
-	}
-
-	// Try to get the actual document name from Drive
-	fileInfo, err := o.drive.GetFileInfo(ctx, docID)
-	if err == nil && fileInfo != nil {
-		doc.Name = fileInfo.Name
-	}
-
-	o.log(fmt.Sprintf("   Processing document: %s", doc.Name))
-	o.log("")
-
-	if err := o.processDocumentForTasks(ctx, doc); err != nil {
-		return fmt.Errorf("failed to process document: %w", err)
-	}
-
-	return nil
-}
-
-// processDocumentForTasks processes a single document for action items.
-func (o *Organizer) processDocumentForTasks(ctx context.Context, doc *models.Document) error {
-	checkboxes, err := o.docs.ExtractCheckboxItems(ctx, doc.ID)
-	if err != nil {
-		return err
-	}
-
-	if len(checkboxes) == 0 {
-		return nil
-	}
-
-	o.logVerbose(fmt.Sprintf("   📄 %s: %d checkbox items", doc.Name, len(checkboxes)))
-
-	for _, cb := range checkboxes {
-		if cb.IsProcessed {
-			o.stats.ItemsSkipped++
-			o.logVerbose(fmt.Sprintf("      ⏭️  Skipping (already processed): %s", truncate(cb.Text, 40)))
-			continue
-		}
-
-		// Extract action item with Gemini
-		response, err := o.gemini.ExtractActionItem(ctx, cb.Text)
-		if err != nil {
-			o.log(fmt.Sprintf("      ⚠️  Gemini extraction failed: %v", err))
-			o.stats.Errors++
-			continue
-		}
-
-		if response.Assignee == "" {
-			o.stats.ItemsSkipped++
-			o.logVerbose(fmt.Sprintf("      ⏭️  No assignee found: %s", truncate(cb.Text, 40)))
-			continue
-		}
-
-		// Only create tasks for the current user (Jay Flowers)
-		if !strings.Contains(strings.ToLower(response.Assignee), "jay") {
-			o.stats.ItemsSkipped++
-			o.logVerbose(fmt.Sprintf("      ⏭️  Assigned to others: %s -> %s", truncate(cb.Text, 30), response.Assignee))
-			continue
-		}
-
-		dueDate, _ := gemini.ParseDate(response.Date)
-		dateStr := response.Date
-		if dateStr == "" {
-			dateStr = "(no date)"
-		}
-
-		actionItem := &models.ActionItem{
-			DocumentID:   doc.ID,
-			DocumentName: doc.Name,
-			Text:         cb.Text,
-			Assignee:     response.Assignee,
-			DueDate:      dueDate,
-			LineIndex:    int(cb.EndIndex - 1),
-		}
-
-		if o.drive.IsDryRun() {
-			o.stats.TasksCreated++
-			o.log(fmt.Sprintf("   ✓ Created task: %s -> %s", truncate(cb.Text, 30), response.Assignee))
-			continue
-		}
-
-		// Create the task
-		taskID, err := o.tasks.CreateTask(ctx, actionItem)
-		if err != nil {
-			o.log(fmt.Sprintf("      ⚠️  Failed to create task: %v", err))
-			o.stats.Errors++
-			continue
-		}
-		actionItem.TaskID = taskID
-		o.stats.TasksCreated++
-
-		// Note: We no longer annotate the document - just create the task
-		o.log(fmt.Sprintf("   ✓ Created task: %s -> %s", truncate(cb.Text, 30), response.Assignee))
-	}
-
-	return nil
-}
-
 func (o *Organizer) log(msg string) {
 	fmt.Println(msg)
 }
@@ -414,11 +287,4 @@ func (o *Organizer) logVerbose(msg string) {
 	if o.verbose {
 		fmt.Println(msg)
 	}
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
 }

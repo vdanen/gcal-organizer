@@ -534,3 +534,55 @@ func (s *Service) TrashFile(ctx context.Context, fileID, description string) Act
 	}
 }
 
+// ShareFolder shares a folder with the specified email address.
+// Returns ActionResult describing what happened.
+func (s *Service) ShareFolder(ctx context.Context, folderID, folderName, email string) ActionResult {
+	if s.dryRun {
+		return ActionResult{
+			Action:  "share",
+			Skipped: true,
+			Reason:  "dry-run",
+			Details: fmt.Sprintf("Would share '%s' with %s", folderName, email),
+		}
+	}
+
+	// Check if user already has access
+	permissions, err := s.client.Permissions.List(folderID).Fields("permissions(emailAddress, role)").Do()
+	if err == nil {
+		for _, perm := range permissions.Permissions {
+			if perm.EmailAddress == email {
+				return ActionResult{
+					Action:  "share",
+					Skipped: true,
+					Reason:  "already shared",
+					Details: fmt.Sprintf("'%s' already shared with %s", folderName, email),
+				}
+			}
+		}
+	}
+
+	// Create permission for the email
+	permission := &drive.Permission{
+		Type:         "user",
+		Role:         "reader",
+		EmailAddress: email,
+	}
+
+	_, err = s.client.Permissions.Create(folderID, permission).
+		SendNotificationEmail(false).
+		Do()
+	if err != nil {
+		return ActionResult{
+			Action:  "share",
+			Skipped: true,
+			Reason:  fmt.Sprintf("error: %v", err),
+			Details: fmt.Sprintf("Failed to share '%s' with %s", folderName, email),
+		}
+	}
+
+	return ActionResult{
+		Action:  "share",
+		Skipped: false,
+		Details: fmt.Sprintf("Shared '%s' with %s", folderName, email),
+	}
+}
