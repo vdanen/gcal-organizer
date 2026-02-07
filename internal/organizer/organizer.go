@@ -248,8 +248,8 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 
 		// Share folder with attendees
 		for _, attendee := range event.Attendees {
-			// Skip self and empty emails
-			if attendee.IsSelf || attendee.Email == "" {
+			// Skip self, empty emails, and calendar resources
+			if attendee.IsSelf || attendee.Email == "" || isCalendarResource(attendee.Email) {
 				continue
 			}
 
@@ -277,7 +277,7 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 			}
 
 			for _, attendee := range event.Attendees {
-				if attendee.IsSelf || attendee.Email == "" {
+				if attendee.IsSelf || attendee.Email == "" || isCalendarResource(attendee.Email) {
 					continue
 				}
 
@@ -294,6 +294,13 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// isCalendarResource returns true for Google Calendar resource/group addresses
+// that cannot be shared with (e.g. conference rooms, group calendars).
+func isCalendarResource(email string) bool {
+	return strings.HasSuffix(email, "@resource.calendar.google.com") ||
+		strings.HasSuffix(email, "@group.calendar.google.com")
 }
 
 // logActionResult logs the result of a document action.
