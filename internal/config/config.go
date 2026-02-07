@@ -40,19 +40,23 @@ type Config struct {
 
 	// DryRun prevents making changes
 	DryRun bool
+
+	// ChromeProfilePath is the path to Chrome profile for browser automation
+	ChromeProfilePath string
 }
 
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
 	return &Config{
-		MasterFolderName: "Meeting Notes",
-		DaysToLookBack:   8,
-		FilenamePattern:  `(.+)\s*-\s*(\d{4}-\d{2}-\d{2})`,
-		FilenameKeywords: []string{"Notes", "Meeting"},
-		GeminiModel:      "gemini-2.0-flash",
-		CredentialsFile:  home + "/.gcal-organizer/credentials.json",
-		TokenFile:        home + "/.gcal-organizer/token.json",
+		MasterFolderName:  "Meeting Notes",
+		DaysToLookBack:    8,
+		FilenamePattern:   `(.+)\s*-\s*(\d{4}-\d{2}-\d{2})`,
+		FilenameKeywords:  []string{"Notes", "Meeting"},
+		GeminiModel:       "gemini-2.0-flash",
+		CredentialsFile:   home + "/.gcal-organizer/credentials.json",
+		TokenFile:         home + "/.gcal-organizer/token.json",
+		ChromeProfilePath: home + "/Library/Application Support/Google/Chrome/Profile 1",
 	}
 }
 

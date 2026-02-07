@@ -42,3 +42,5 @@ build/
 
 # Local configuration overrides
 config.local.yaml
+chrome-user-data-dir/
+node_modules/

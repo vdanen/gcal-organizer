@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
 
 	"github.com/jflowers/gcal-organizer/pkg/models"
 	"google.golang.org/api/docs/v1"
@@ -160,7 +161,18 @@ func extractParagraphText(para *docs.Paragraph) string {
 			text.WriteString(textElem.TextRun.Content)
 		}
 	}
-	return strings.TrimSpace(text.String())
+	// Strip non-printable characters (vertical tabs, carriage returns, zero-width spaces, etc.)
+	// that Google Docs API may include in TextRun.Content
+	cleaned := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || r == ' ' {
+			return r // keep normal whitespace
+		}
+		if unicode.IsControl(r) || !unicode.IsPrint(r) {
+			return -1 // strip
+		}
+		return r
+	}, text.String())
+	return strings.TrimSpace(cleaned)
 }
 
 // AnnotateActionItem adds the processed marker to an action item in the document.
