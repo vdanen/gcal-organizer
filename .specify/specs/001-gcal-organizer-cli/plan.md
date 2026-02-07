@@ -113,7 +113,7 @@ Initialize Go module with dependencies.
 #### [NEW] `cmd/gcal-organizer/main.go`
 CLI entry point using Cobra:
 - Root command with global flags (--verbose, --dry-run, --config)
-- Subcommands: `organize`, `sync-calendar`, `extract-tasks`, `run`
+- Subcommands: `organize`, `sync-calendar`, `assign-tasks`, `run`
 
 #### [NEW] `internal/config/config.go`
 Configuration management:
@@ -199,8 +199,8 @@ Data models for Document, Meeting, ActionItem
 Add command implementations:
 - `organize`: Run document organization workflow
 - `sync-calendar`: Sync calendar attachments
-- `extract-tasks`: Extract and create tasks
-- `run`: Execute full workflow
+- `assign-tasks`: Assign tasks via browser automation (see spec 002)
+- `run`: Execute full workflow (organize → sync → assign tasks)
 
 ## Verification Plan
 

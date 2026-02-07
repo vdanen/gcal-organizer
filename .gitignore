@@ -1,5 +1,5 @@
 # Binaries
-gcal-organizer
+/gcal-organizer
 *.exe
 *.exe~
 *.dll

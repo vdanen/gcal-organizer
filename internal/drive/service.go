@@ -534,28 +534,35 @@ func (s *Service) TrashFile(ctx context.Context, fileID, description string) Act
 	}
 }
 
-// ShareFolder shares a folder with the specified email address.
+// ShareFolder shares a folder with the specified email address (writer access).
 // Returns ActionResult describing what happened.
 func (s *Service) ShareFolder(ctx context.Context, folderID, folderName, email string) ActionResult {
+	return s.ShareFile(ctx, folderID, folderName, email, "writer")
+}
+
+// ShareFile shares a file or folder with the specified email address and role.
+// Role should be "reader", "writer", or "commenter".
+// Returns ActionResult describing what happened.
+func (s *Service) ShareFile(ctx context.Context, fileID, fileName, email, role string) ActionResult {
 	if s.dryRun {
 		return ActionResult{
 			Action:  "share",
 			Skipped: true,
 			Reason:  "dry-run",
-			Details: fmt.Sprintf("Would share '%s' with %s", folderName, email),
+			Details: fmt.Sprintf("Would share '%s' with %s (%s)", fileName, email, role),
 		}
 	}
 
 	// Check if user already has access
-	permissions, err := s.client.Permissions.List(folderID).Fields("permissions(emailAddress, role)").Do()
+	permissions, err := s.client.Permissions.List(fileID).Fields("permissions(emailAddress, role)").Do()
 	if err == nil {
 		for _, perm := range permissions.Permissions {
-			if perm.EmailAddress == email {
+			if strings.EqualFold(perm.EmailAddress, email) {
 				return ActionResult{
 					Action:  "share",
 					Skipped: true,
 					Reason:  "already shared",
-					Details: fmt.Sprintf("'%s' already shared with %s", folderName, email),
+					Details: fmt.Sprintf("'%s' already shared with %s", fileName, email),
 				}
 			}
 		}
@@ -564,11 +571,11 @@ func (s *Service) ShareFolder(ctx context.Context, folderID, folderName, email s
 	// Create permission for the email
 	permission := &drive.Permission{
 		Type:         "user",
-		Role:         "reader",
+		Role:         role,
 		EmailAddress: email,
 	}
 
-	_, err = s.client.Permissions.Create(folderID, permission).
+	_, err = s.client.Permissions.Create(fileID, permission).
 		SendNotificationEmail(false).
 		Do()
 	if err != nil {
@@ -576,13 +583,24 @@ func (s *Service) ShareFolder(ctx context.Context, folderID, folderName, email s
 			Action:  "share",
 			Skipped: true,
 			Reason:  fmt.Sprintf("error: %v", err),
-			Details: fmt.Sprintf("Failed to share '%s' with %s", folderName, email),
+			Details: fmt.Sprintf("Failed to share '%s' with %s", fileName, email),
 		}
 	}
 
 	return ActionResult{
 		Action:  "share",
 		Skipped: false,
-		Details: fmt.Sprintf("Shared '%s' with %s", folderName, email),
+		Details: fmt.Sprintf("Shared '%s' with %s", fileName, email),
 	}
+}
+
+// CanEditFile checks if the current user owns or has editor access to the file.
+func (s *Service) CanEditFile(ctx context.Context, fileID string) bool {
+	file, err := s.client.Files.Get(fileID).
+		Fields("capabilities(canEdit)").
+		Do()
+	if err != nil {
+		return false
+	}
+	return file.Capabilities != nil && file.Capabilities.CanEdit
 }

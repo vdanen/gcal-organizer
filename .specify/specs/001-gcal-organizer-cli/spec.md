@@ -61,7 +61,7 @@ As a user, I want the tool to scan my recent calendar events and sync any attach
 
 ### User Story 3 - Run Full Workflow (Priority: P1)
 
-As a user, I want a single command to run the complete workflow: organize, sync, and share folders.
+As a user, I want a single command to run the complete workflow: organize, sync, share folders, and assign tasks.
 
 **Why this priority**: Primary user interaction mode for daily use.
 
@@ -69,9 +69,11 @@ As a user, I want a single command to run the complete workflow: organize, sync,
 
 **Acceptance Scenarios**:
 
-1. **Given** configured environment variables and credentials, **When** I run `gcal-organizer run`, **Then** all sub-workflows execute in sequence with progress output.
+1. **Given** configured environment variables and credentials, **When** I run `gcal-organizer run`, **Then** all sub-workflows execute in sequence: Step 1 (organize), Step 2 (sync calendar), Step 3 (assign tasks from Notes docs).
 
-2. **Given** `--dry-run` flag is provided, **When** I run `gcal-organizer run --dry-run`, **Then** all actions are logged but no changes are made to Drive, Docs, or Tasks.
+2. **Given** `--dry-run` flag is provided, **When** I run `gcal-organizer run --dry-run`, **Then** Steps 1 & 2 log actions without changes, and Step 3 reports how many docs would be scanned without launching browser.
+
+3. **Given** calendar sync discovers Notes documents, **When** Step 3 runs, **Then** each Notes doc is scanned for unassigned checkboxes and browser automation assigns tasks.
 
 ---
 
@@ -92,6 +94,26 @@ As a user, I want my meeting folders to be automatically shared with all attende
 3. **Given** `--dry-run` flag is provided, **When** I run the command, **Then** output shows "Would share [folder] with [email]" without actually sharing.
 
 4. **Given** an attendee email fails validation (e.g., external domain blocked by org policy), **When** sharing fails, **Then** the error is logged and processing continues.
+
+---
+
+### User Story 7 - Share Attachments with Attendees (Priority: P2)
+
+As a user, I want calendar event attachments to be automatically shared with all attendees so they can access the files linked via shortcuts in the meeting folder.
+
+**Why this priority**: Shortcuts to files the user can't access are useless; sharing the underlying files makes the folder structure actually functional.
+
+**Independent Test**: Can be tested by running sync-calendar on an event with an owned attachment and verifying attendees receive edit access.
+
+**Acceptance Scenarios**:
+
+1. **Given** a calendar event attachment that I own, **When** I run `sync-calendar`, **Then** the attachment is shared with all attendees with edit access.
+
+2. **Given** a calendar event attachment that I do NOT have edit access to, **When** I run `sync-calendar`, **Then** the attachment sharing is skipped with a verbose log message.
+
+3. **Given** an attendee already has access to the attachment, **When** I run `sync-calendar`, **Then** the sharing is skipped (idempotent).
+
+4. **Given** `--dry-run` flag is provided, **When** I run the command, **Then** output shows "Would share [attachment] with [email] (writer)" without actually sharing.
 
 ---
 
@@ -150,7 +172,7 @@ As a user, I want to view my current configuration to verify settings are correc
 - **FR-004**: System MUST move owned documents and create shortcuts for non-owned documents
 - **FR-005**: System MUST scan calendar events within configurable lookback period (default: 8 days)
 - **FR-006**: System MUST detect Drive attachments via Calendar API and URLs in event descriptions
-- **FR-007**: System MUST share meeting folders with all attendees from the corresponding calendar event (view access)
+- **FR-007**: System MUST share meeting folders with all attendees from the corresponding calendar event (writer access)
 - **FR-008**: System MUST skip sharing for attendees who already have access (idempotent)
 - **FR-009**: System MUST support `--dry-run` mode with detailed output showing:
   - **FR-009a**: For document organization: file name, source location, target folder, and action (move vs shortcut)
@@ -158,6 +180,8 @@ As a user, I want to view my current configuration to verify settings are correc
   - **FR-009c**: For folder sharing: folder name, attendee emails to share with
   - **FR-009d**: Summary counts at the end (documents processed, shortcuts created, shares added)
 - **FR-010**: System MUST support `--verbose` mode for detailed logging
+- **FR-011**: System MUST share calendar event attachments with all attendees (writer access) when the user has edit access to the attachment
+- **FR-012**: System MUST skip sharing attachments the user does not have edit access to, with a verbose log message
 
 ### Configuration Requirements
 

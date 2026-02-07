@@ -4,6 +4,7 @@ package organizer
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jflowers/gcal-organizer/internal/calendar"
 	"github.com/jflowers/gcal-organizer/internal/config"
@@ -12,14 +13,17 @@ import (
 
 // Stats tracks operation counts for summary reporting.
 type Stats struct {
-	DocumentsFound    int
-	DocumentsMoved    int
-	ShortcutsCreated  int
-	ShortcutsTrashed  int
-	EventsProcessed   int
-	EventsWithAttach  int
-	FoldersShared     int
-	Errors            int
+	DocumentsFound     int
+	DocumentsMoved     int
+	ShortcutsCreated   int
+	ShortcutsTrashed   int
+	EventsProcessed    int
+	EventsWithAttach   int
+	FoldersShared      int
+	AttachmentsShared  int
+	TasksAssigned      int
+	TasksFailed        int
+	Errors             int
 }
 
 // Organizer orchestrates all the services.
@@ -28,18 +32,29 @@ type Organizer struct {
 	drive    *drive.Service
 	calendar *calendar.Service
 
-	verbose bool
-	stats   Stats
+	verbose     bool
+	stats       Stats
+	notesDocIDs map[string]bool // Google Doc IDs with "Notes" attachments
 }
 
 // New creates a new Organizer with all services initialized.
 func New(cfg *config.Config, driveSvc *drive.Service, calSvc *calendar.Service) *Organizer {
 	return &Organizer{
-		config:   cfg,
-		drive:    driveSvc,
-		calendar: calSvc,
-		verbose:  cfg.Verbose,
+		config:      cfg,
+		drive:       driveSvc,
+		calendar:    calSvc,
+		verbose:     cfg.Verbose,
+		notesDocIDs: make(map[string]bool),
 	}
+}
+
+// GetNotesDocIDs returns the list of Google Doc IDs with "Notes" attachments.
+func (o *Organizer) GetNotesDocIDs() []string {
+	var ids []string
+	for id := range o.notesDocIDs {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // RunFullWorkflow executes all operations in sequence.
@@ -68,10 +83,21 @@ func (o *Organizer) RunFullWorkflow(ctx context.Context) error {
 	}
 	o.log("")
 
-	// Print summary
-	o.printSummary()
+	// Note: Step 3 (Assign Tasks) is handled by the caller if needed,
+	// since it requires browser automation that lives outside the organizer.
 
 	return nil
+}
+
+// PrintSummary outputs the final statistics.
+func (o *Organizer) PrintSummary() {
+	o.printSummary()
+}
+
+// AddTaskStats updates the task assignment statistics.
+func (o *Organizer) AddTaskStats(assigned, failed int) {
+	o.stats.TasksAssigned += assigned
+	o.stats.TasksFailed += failed
 }
 
 // printSummary outputs the final statistics.
@@ -93,6 +119,15 @@ func (o *Organizer) printSummary() {
 	o.log(fmt.Sprintf("   📎 Events with attachments: %d", o.stats.EventsWithAttach))
 	if o.stats.FoldersShared > 0 {
 		o.log(fmt.Sprintf("   👥 Folders shared:          %d", o.stats.FoldersShared))
+	}
+	if o.stats.AttachmentsShared > 0 {
+		o.log(fmt.Sprintf("   📎 Attachments shared:      %d", o.stats.AttachmentsShared))
+	}
+	if o.stats.TasksAssigned > 0 || o.stats.TasksFailed > 0 {
+		o.log(fmt.Sprintf("   ✅ Tasks assigned:          %d", o.stats.TasksAssigned))
+		if o.stats.TasksFailed > 0 {
+			o.log(fmt.Sprintf("   ❌ Tasks failed:            %d", o.stats.TasksFailed))
+		}
 	}
 	if o.stats.Errors > 0 {
 		o.log(fmt.Sprintf("   ⚠️  Errors encountered:     %d", o.stats.Errors))
@@ -203,6 +238,12 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 
 			result := o.drive.CreateShortcut(ctx, att.FileID, title, folder.ID, folder.Name, folder.IsNew)
 			o.logCalendarAction(result, event.Title, event.Start.Format("2006-01-02"), title)
+
+			// Track Google Docs with "Notes" in the title for task assignment
+			if att.MimeType == "application/vnd.google-apps.document" &&
+				strings.Contains(strings.ToLower(title), "notes") {
+				o.notesDocIDs[att.FileID] = true
+			}
 		}
 
 		// Share folder with attendees
@@ -220,6 +261,34 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 				// Log errors but not "already shared" skips
 				o.log(fmt.Sprintf("   ⚠️  %s", result.Details))
 				o.stats.Errors++
+			}
+		}
+
+		// Share attachments with attendees (edit access)
+		for _, att := range event.Attachments {
+			if att.FileID == "" {
+				continue
+			}
+
+			// Only share if we have edit access to the attachment
+			if !o.drive.CanEditFile(ctx, att.FileID) {
+				o.logVerbose(fmt.Sprintf("   ⏭️  SKIP: No edit access to '%s'", att.Title))
+				continue
+			}
+
+			for _, attendee := range event.Attendees {
+				if attendee.IsSelf || attendee.Email == "" {
+					continue
+				}
+
+				result := o.drive.ShareFile(ctx, att.FileID, att.Title, attendee.Email, "writer")
+				if !result.Skipped || result.Reason == "dry-run" {
+					o.stats.AttachmentsShared++
+					o.log(fmt.Sprintf("   📎 %s", result.Details))
+				} else if result.Reason != "already shared" {
+					o.log(fmt.Sprintf("   ⚠️  %s", result.Details))
+					o.stats.Errors++
+				}
 			}
 		}
 	}
