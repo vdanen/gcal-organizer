@@ -161,6 +161,8 @@ As a user, I want to view my current configuration to verify settings are correc
   → Log the error and continue with remaining documents
 - What happens when moving an owned document that has an existing shortcut in the target folder?
   → The redundant shortcut is trashed to avoid duplicates
+- What happens when an attendee is a calendar resource or group calendar (e.g. `@resource.calendar.google.com`, `@group.calendar.google.com`)?
+  → Automatically skipped during folder and attachment sharing (always fails)
 
 ## Requirements *(mandatory)*
 
