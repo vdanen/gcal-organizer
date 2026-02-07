@@ -1,4 +1,4 @@
-.PHONY: build test run clean install lint fmt vet
+.PHONY: build test run clean install lint fmt vet install-service uninstall-service service-status service-logs service-trigger
 
 # Binary name
 BINARY_NAME=gcal-organizer
@@ -11,6 +11,15 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOVET=$(GOCMD) vet
 GOFMT=gofmt
+
+# Deploy paths
+DEPLOY_DIR=$(CURDIR)/deploy
+WRAPPER_SRC=$(DEPLOY_DIR)/run-wrapper.sh
+PLIST_SRC=$(DEPLOY_DIR)/launchd/com.jflowers.gcal-organizer.plist
+PLIST_DEST=$(HOME)/Library/LaunchAgents/com.jflowers.gcal-organizer.plist
+LOG_DIR=$(HOME)/Library/Logs
+SYSTEMD_DIR=$(HOME)/.config/systemd/user
+WRAPPER_DEST=$(HOME)/.local/bin/gcal-organizer-wrapper.sh
 
 # Build the binary
 build:
@@ -61,19 +70,108 @@ check: fmt vet test
 dev: build
 	./$(BINARY_NAME) $(ARGS)
 
+# ─── Service Management ───────────────────────────────────────
+
+# Install as an hourly service (auto-detects macOS vs Linux)
+install-service: install
+ifeq ($(shell uname),Darwin)
+	@echo "🍎 Installing macOS LaunchAgent..."
+	@mkdir -p $(LOG_DIR)
+	@sed -e 's|WRAPPER_PATH_PLACEHOLDER|$(WRAPPER_DEST)|g' \
+	     -e 's|LOG_PATH_PLACEHOLDER|$(LOG_DIR)/gcal-organizer.log|g' \
+	     -e 's|HOME_PATH_PLACEHOLDER|$(HOME)|g' \
+	     $(PLIST_SRC) > $(PLIST_DEST)
+	@mkdir -p $(HOME)/.local/bin
+	@cp $(WRAPPER_SRC) $(WRAPPER_DEST)
+	@chmod +x $(WRAPPER_DEST)
+	@launchctl bootout gui/$$(id -u) $(PLIST_DEST) 2>/dev/null || true
+	@launchctl bootstrap gui/$$(id -u) $(PLIST_DEST)
+	@echo "✅ Installed! Will run every hour."
+	@echo "   Logs: $(LOG_DIR)/gcal-organizer.log"
+	@echo "   Trigger now: make service-trigger"
+else
+	@echo "🐧 Installing systemd user service..."
+	@mkdir -p $(SYSTEMD_DIR)
+	@mkdir -p $(HOME)/.local/bin
+	@cp $(WRAPPER_SRC) $(WRAPPER_DEST)
+	@chmod +x $(WRAPPER_DEST)
+	@cp $(DEPLOY_DIR)/systemd/gcal-organizer.service $(SYSTEMD_DIR)/
+	@cp $(DEPLOY_DIR)/systemd/gcal-organizer.timer $(SYSTEMD_DIR)/
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now gcal-organizer.timer
+	@echo "✅ Installed! Timer active."
+	@echo "   Logs: journalctl --user -u gcal-organizer.service"
+	@echo "   Trigger now: make service-trigger"
+endif
+
+# Uninstall the service
+uninstall-service:
+ifeq ($(shell uname),Darwin)
+	@echo "🍎 Removing macOS LaunchAgent..."
+	@launchctl bootout gui/$$(id -u) $(PLIST_DEST) 2>/dev/null || true
+	@rm -f $(PLIST_DEST)
+	@rm -f $(WRAPPER_DEST)
+	@echo "✅ Service removed."
+else
+	@echo "🐧 Removing systemd user service..."
+	@systemctl --user disable --now gcal-organizer.timer 2>/dev/null || true
+	@rm -f $(SYSTEMD_DIR)/gcal-organizer.service
+	@rm -f $(SYSTEMD_DIR)/gcal-organizer.timer
+	@rm -f $(WRAPPER_DEST)
+	@systemctl --user daemon-reload
+	@echo "✅ Service removed."
+endif
+
+# Show service status
+service-status:
+ifeq ($(shell uname),Darwin)
+	@echo "🍎 macOS LaunchAgent status:"
+	@launchctl print gui/$$(id -u)/com.jflowers.gcal-organizer 2>/dev/null || echo "   Not installed"
+else
+	@echo "🐧 systemd timer status:"
+	@systemctl --user status gcal-organizer.timer 2>/dev/null || echo "   Not installed"
+endif
+
+# Show recent logs
+service-logs:
+ifeq ($(shell uname),Darwin)
+	@echo "🍎 Recent logs (last 50 lines):"
+	@tail -50 $(LOG_DIR)/gcal-organizer.log 2>/dev/null || echo "   No logs yet"
+else
+	@echo "🐧 Recent logs:"
+	@journalctl --user -u gcal-organizer.service --since "24 hours ago" --no-pager 2>/dev/null || echo "   No logs yet"
+endif
+
+# Trigger an immediate run
+service-trigger:
+ifeq ($(shell uname),Darwin)
+	@echo "🍎 Triggering immediate run..."
+	@launchctl kickstart gui/$$(id -u)/com.jflowers.gcal-organizer
+else
+	@echo "🐧 Triggering immediate run..."
+	@systemctl --user start gcal-organizer.service
+endif
+
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  build         - Build the binary"
-	@echo "  test          - Run tests"
-	@echo "  test-coverage - Run tests with coverage report"
-	@echo "  run           - Run the application (use ARGS=... for arguments)"
-	@echo "  dry-run       - Run with --dry-run --verbose flags"
-	@echo "  install       - Install to GOPATH/bin"
-	@echo "  clean         - Remove build artifacts"
-	@echo "  vet           - Run go vet"
-	@echo "  fmt           - Format code"
-	@echo "  lint          - Run golangci-lint"
-	@echo "  check         - Run fmt, vet, and test"
-	@echo "  dev           - Build and run"
-	@echo "  help          - Show this help"
+	@echo "  build             - Build the binary"
+	@echo "  test              - Run tests"
+	@echo "  test-coverage     - Run tests with coverage report"
+	@echo "  run               - Run the application (use ARGS=... for arguments)"
+	@echo "  dry-run           - Run with --dry-run --verbose flags"
+	@echo "  install           - Install to GOPATH/bin"
+	@echo "  clean             - Remove build artifacts"
+	@echo "  vet               - Run go vet"
+	@echo "  fmt               - Format code"
+	@echo "  lint              - Run golangci-lint"
+	@echo "  check             - Run fmt, vet, and test"
+	@echo "  dev               - Build and run"
+	@echo ""
+	@echo "Service management:"
+	@echo "  install-service   - Install as hourly service (macOS/Fedora)"
+	@echo "  uninstall-service - Remove the service"
+	@echo "  service-status    - Show service state"
+	@echo "  service-logs      - Show recent logs"
+	@echo "  service-trigger   - Trigger an immediate run"
+	@echo "  help              - Show this help"

@@ -97,6 +97,11 @@ var runCmd = &cobra.Command{
 		cfg.DryRun = dryRun
 		cfg.Verbose = verbose
 
+		days, _ := cmd.Flags().GetInt("days")
+		if days > 0 {
+			cfg.DaysToLookBack = days
+		}
+
 		org, err := initServices(ctx, cfg)
 		if err != nil {
 			return err
@@ -767,6 +772,7 @@ func init() {
 
 	// Add flags to specific commands
 	syncCalendarCmd.Flags().Int("days", 8, "number of days to look back for calendar events")
+	runCmd.Flags().Int("days", 0, "number of days to look back for calendar events (overrides GCAL_DAYS_TO_LOOK_BACK)")
 	assignTasksCmd.Flags().String("doc", "", "Google Doc ID to process (required)")
 
 	// Add subcommands
