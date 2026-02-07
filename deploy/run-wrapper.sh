@@ -16,12 +16,19 @@ fi
 export GCAL_DAYS_TO_LOOK_BACK=1
 
 # Find the binary
-BINARY="${GCAL_ORGANIZER_BIN:-$(command -v gcal-organizer 2>/dev/null || echo "${HOME}/go/bin/gcal-organizer")}"
-
-if [ ! -x "$BINARY" ]; then
-    echo "ERROR: gcal-organizer binary not found at $BINARY" >&2
-    echo "Set GCAL_ORGANIZER_BIN or install to PATH" >&2
-    exit 1
+if [ -n "${GCAL_ORGANIZER_BIN:-}" ] && [ -x "$GCAL_ORGANIZER_BIN" ]; then
+    BINARY="$GCAL_ORGANIZER_BIN"
+elif command -v gcal-organizer &>/dev/null; then
+    BINARY="$(command -v gcal-organizer)"
+else
+    GOPATH_BIN="$(go env GOPATH 2>/dev/null)/bin/gcal-organizer"
+    if [ -x "$GOPATH_BIN" ]; then
+        BINARY="$GOPATH_BIN"
+    else
+        echo "ERROR: gcal-organizer binary not found" >&2
+        echo "Run 'make install' first, or set GCAL_ORGANIZER_BIN" >&2
+        exit 1
+    fi
 fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting gcal-organizer run"

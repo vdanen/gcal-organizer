@@ -80,6 +80,7 @@ ifeq ($(shell uname),Darwin)
 	@sed -e 's|WRAPPER_PATH_PLACEHOLDER|$(WRAPPER_DEST)|g' \
 	     -e 's|LOG_PATH_PLACEHOLDER|$(LOG_DIR)/gcal-organizer.log|g' \
 	     -e 's|HOME_PATH_PLACEHOLDER|$(HOME)|g' \
+	     -e "s|BINARY_PATH_PLACEHOLDER|$$(go env GOPATH)/bin/gcal-organizer|g" \
 	     $(PLIST_SRC) > $(PLIST_DEST)
 	@mkdir -p $(HOME)/.local/bin
 	@cp $(WRAPPER_SRC) $(WRAPPER_DEST)
