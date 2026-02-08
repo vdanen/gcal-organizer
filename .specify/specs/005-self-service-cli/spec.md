@@ -2,7 +2,7 @@
 
 **Feature Branch**: `005-self-service-cli`  
 **Created**: 2026-02-08  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: Make the CLI self-bootstrapping with actionable errors, eliminating documentation as a dependency for setup
 
 ## User Scenarios & Testing *(mandatory)*

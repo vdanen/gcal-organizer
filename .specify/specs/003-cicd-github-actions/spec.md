@@ -2,7 +2,7 @@
 
 **Feature Branch**: `003-cicd-github-actions`  
 **Created**: 2026-02-07  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: Set up CI/CD pipeline with GitHub Actions for automated quality checks and releases
 
 ## User Scenarios & Testing *(mandatory)*
@@ -58,8 +58,10 @@ As a developer, I want pushing a version tag (e.g., `v1.1.0`) to automatically c
 - **FR-004**: CI workflow MUST check formatting with `gofmt -l`
 - **FR-005**: CI workflow MUST run `go test ./...`
 - **FR-006**: Release workflow MUST trigger on `v*` tags
-- **FR-007**: Release workflow MUST build binaries for macOS (arm64, amd64) and Linux (amd64)
+- **FR-007**: Release workflow MUST build binaries for macOS (arm64, amd64) and Linux (amd64, arm64)
 - **FR-008**: Release workflow MUST create a GitHub Release with the binaries attached
+- **FR-009**: Release workflow MUST generate a versioned Homebrew formula with correct SHA256
+- **FR-010**: Release workflow MUST package and attach the man page to the release
 
 ## Success Criteria *(mandatory)*
 

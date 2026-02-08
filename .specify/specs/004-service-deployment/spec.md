@@ -2,7 +2,7 @@
 
 **Feature Branch**: `004-service-deployment`  
 **Created**: 2026-02-07  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: Run gcal-organizer hourly as a service on Fedora and macOS with 1-day lookback
 
 ## User Scenarios & Testing *(mandatory)*
@@ -17,9 +17,9 @@ As a macOS user, I want gcal-organizer to run automatically every hour so my mee
 
 **Acceptance Scenarios**:
 
-1. **Given** the service is installed via `make install-service`, **When** 1 hour elapses, **Then** `gcal-organizer run` executes with 1-day lookback and logs output
-2. **Given** the service is running, **When** I run `make service-status`, **Then** I see the current state and last run time
-3. **Given** I want to stop it, **When** I run `make uninstall-service`, **Then** the service is removed cleanly
+1. **Given** the service is installed via `gcal-organizer install` (or `make install-service`), **When** 1 hour elapses, **Then** `gcal-organizer run` executes with 1-day lookback and logs output
+2. **Given** the service is running, **When** I run `gcal-organizer doctor` (or `make service-status`), **Then** I see the current state and last run time
+3. **Given** I want to stop it, **When** I run `gcal-organizer uninstall` (or `make uninstall-service`), **Then** the service is removed cleanly
 
 ---
 
@@ -33,9 +33,9 @@ As a Fedora user, I want the same hourly scheduling via systemd user services.
 
 **Acceptance Scenarios**:
 
-1. **Given** the service is installed via `make install-service`, **When** 1 hour elapses, **Then** `gcal-organizer run` executes with 1-day lookback and logs output
+1. **Given** the service is installed via `gcal-organizer install` (or `make install-service`), **When** 1 hour elapses, **Then** `gcal-organizer run` executes with 1-day lookback and logs output
 2. **Given** the service is running, **When** I run `systemctl --user status gcal-organizer.timer`, **Then** I see the timer state and next trigger time
-3. **Given** I want to stop it, **When** I run `make uninstall-service`, **Then** the systemd units are disabled and removed
+3. **Given** I want to stop it, **When** I run `gcal-organizer uninstall` (or `make uninstall-service`), **Then** the systemd units are disabled and removed
 
 ---
 
@@ -92,18 +92,6 @@ As a user, I want to read `man gcal-organizer` for offline reference of all comm
 
 1. **Given** gcal-organizer is installed, **When** I run `man gcal-organizer`, **Then** I see a formatted manual covering commands, flags, env vars, files, and examples
 
----
-
-### Edge Cases
-
-- What happens when the browser automation (task assignment) runs without a display?
-  → On macOS, launchd runs in the user session and has access to the GUI. On Fedora, the systemd user service runs in the user session; if no display is available, Step 3 (assign-tasks) is skipped gracefully
-- What happens when the machine is asleep during a scheduled run?
-  → macOS launchd will run the job when the machine wakes. systemd timers with `Persistent=true` catch up on missed runs
-- What happens when credentials expire?
-  → The service logs the auth error and exits; user re-authenticates manually
-- What happens on network failure?
-  → API errors are logged, service exits non-zero, runs again next hour
 
 ## Requirements *(mandatory)*
 
@@ -114,7 +102,7 @@ As a user, I want to read `man gcal-organizer` for offline reference of all comm
 - **FR-003**: macOS service MUST be a launchd user agent (LaunchAgent)
 - **FR-004**: Fedora service MUST be a systemd user service with timer
 - **FR-005**: Service MUST log output with timestamps for troubleshooting
-- **FR-006**: Service MUST provide install/uninstall commands via Makefile targets
+- **FR-006**: Service MUST provide install/uninstall via `gcal-organizer install`/`uninstall` commands (Makefile targets retained for developers)
 - **FR-007**: Service MUST catch up on missed runs (macOS wake, systemd Persistent=true)
 - **FR-008**: Homebrew formula MUST build from source and declare `node` as a runtime dependency
 - **FR-009**: Homebrew formula MUST include a `service` block for `brew services` (macOS + Linux)

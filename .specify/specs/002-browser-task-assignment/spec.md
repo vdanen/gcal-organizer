@@ -104,7 +104,7 @@ As a user running `gcal-organizer run`, I want task assignment to happen automat
 ### Configuration Requirements
 
 - **CR-001**: `GEMINI_API_KEY` - GCP API key for Gemini (string, required)
-- **CR-002**: `CHROME_PROFILE_PATH` - Path to Chrome profile directory for authentication (default: `/Users/jflowers/Library/Application Support/Google/Chrome/Profile 1`)
+- **CR-002**: `CHROME_PROFILE_PATH` - Path to Chrome profile directory for authentication (auto-detected by `gcal-organizer init`)
 
 ### Key Entities
 

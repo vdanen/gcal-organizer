@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-gcal-organizer-cli`  
 **Created**: 2026-02-01  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: Rewrite of Google Apps Script to Go CLI with GCP Gemini API key support
 
 ## Overview
@@ -69,11 +69,11 @@ As a user, I want a single command to run the complete workflow: organize, sync,
 
 **Acceptance Scenarios**:
 
-1. **Given** configured environment variables and credentials, **When** I run `gcal-organizer run`, **Then** all sub-workflows execute in sequence: Step 1 (organize), Step 2 (sync calendar), Step 3 (assign tasks from Notes docs).
+1. **Given** configured environment variables and credentials, **When** I run `gcal-organizer run`, **Then** all sub-workflows execute in sequence: Step 1 (organize), Step 2 (sync calendar), Step 3 (assign tasks from Notes by Gemini docs).
 
 2. **Given** `--dry-run` flag is provided, **When** I run `gcal-organizer run --dry-run`, **Then** Steps 1 & 2 log actions without changes, and Step 3 reports how many docs would be scanned without launching browser.
 
-3. **Given** calendar sync discovers Notes documents, **When** Step 3 runs, **Then** each Notes doc is scanned for unassigned checkboxes and browser automation assigns tasks.
+3. **Given** calendar sync discovers Notes by Gemini documents, **When** Step 3 runs, **Then** each Notes doc is scanned for unassigned checkboxes and browser automation assigns tasks.
 
 ---
 
