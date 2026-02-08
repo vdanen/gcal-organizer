@@ -131,6 +131,10 @@ man gcal-organizer
 | `gcal-organizer auth login` | Authenticate with Google |
 | `gcal-organizer auth status` | Check authentication status |
 | `gcal-organizer config show` | Show current configuration |
+| `gcal-organizer init` | Set up configuration (interactive wizard) |
+| `gcal-organizer doctor` | Check system health and report fixes |
+| `gcal-organizer install` | Install as hourly background service |
+| `gcal-organizer uninstall` | Remove the background service |
 
 ### Flags
 

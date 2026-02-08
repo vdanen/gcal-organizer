@@ -48,6 +48,26 @@ Check current authentication status.
 .TP
 .B config show
 Display current configuration.
+.TP
+.B init
+Set up configuration interactively. Creates config directory, generates
+.I .env
+file, and auto-detects Chrome profile. Use
+.B \-\-non-interactive
+for scripted use or
+.B \-\-api-key
+to provide the Gemini key directly.
+.TP
+.B doctor
+Check system health and report issues with actionable fixes.
+Verifies config directory, credentials, API keys, Node.js, Chrome, and service status.
+.TP
+.B install
+Install as an hourly background service. Auto-detects the OS and uses
+launchd on macOS or systemd on Linux.
+.TP
+.B uninstall
+Stop and remove the background service and all service files.
 .SH FLAGS
 .TP
 .B \-\-dry-run

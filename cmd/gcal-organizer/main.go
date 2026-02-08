@@ -782,10 +782,18 @@ func init() {
 	rootCmd.AddCommand(assignTasksCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(authCmd)
+	rootCmd.AddCommand(doctorCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(installCmd)
+	rootCmd.AddCommand(uninstallCmd)
 
 	configCmd.AddCommand(configShowCmd)
 	authCmd.AddCommand(authLoginCmd)
 	authCmd.AddCommand(authStatusCmd)
+
+	// Init command flags
+	initCmd.Flags().Bool("non-interactive", false, "skip interactive prompts")
+	initCmd.Flags().String("api-key", "", "Gemini API key (skips prompt)")
 }
 
 func initConfig() {

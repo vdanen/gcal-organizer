@@ -2,10 +2,10 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
+	"github.com/jflowers/gcal-organizer/internal/ux"
 	"github.com/spf13/viper"
 )
 
@@ -110,7 +110,7 @@ func Load() (*Config, error) {
 // Validate checks that required configuration values are set.
 func (c *Config) Validate() error {
 	if c.GeminiAPIKey == "" {
-		return fmt.Errorf("GEMINI_API_KEY environment variable is required")
+		return ux.MissingAPIKey()
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func (c *Config) ValidateForWorkflow() error {
 	}
 
 	if _, err := os.Stat(c.CredentialsFile); os.IsNotExist(err) {
-		return fmt.Errorf("credentials file not found: %s\nPlease download OAuth credentials from Google Cloud Console", c.CredentialsFile)
+		return ux.MissingCredentials(c.CredentialsFile)
 	}
 
 	return nil
