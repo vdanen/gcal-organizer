@@ -123,11 +123,9 @@ func (o *Organizer) printSummary() {
 	if o.stats.AttachmentsShared > 0 {
 		o.log(fmt.Sprintf("   📎 Attachments shared:      %d", o.stats.AttachmentsShared))
 	}
-	if o.stats.TasksAssigned > 0 || o.stats.TasksFailed > 0 {
-		o.log(fmt.Sprintf("   ✅ Tasks assigned:          %d", o.stats.TasksAssigned))
-		if o.stats.TasksFailed > 0 {
-			o.log(fmt.Sprintf("   ❌ Tasks failed:            %d", o.stats.TasksFailed))
-		}
+	o.log(fmt.Sprintf("   ✅ Tasks assigned:          %d", o.stats.TasksAssigned))
+	if o.stats.TasksFailed > 0 {
+		o.log(fmt.Sprintf("   ❌ Tasks failed:            %d", o.stats.TasksFailed))
 	}
 	if o.stats.Errors > 0 {
 		o.log(fmt.Sprintf("   ⚠️  Errors encountered:     %d", o.stats.Errors))
