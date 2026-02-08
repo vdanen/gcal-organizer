@@ -24,9 +24,6 @@ jobs:
           - os: macos-14
             arch: arm64
             tag: arm64_sonoma
-          - os: macos-13
-            arch: x86_64
-            tag: ventura
           - os: ubuntu-22.04
             arch: x86_64
             tag: x86_64_linux
