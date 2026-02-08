@@ -42,9 +42,18 @@ run:
 dry-run:
 	$(GOCMD) run $(BINARY_PATH) run --dry-run --verbose
 
-# Install the binary to GOPATH/bin
+# Install the binary to GOPATH/bin and man page
 install:
 	$(GOCMD) install $(BINARY_PATH)
+	@if [ -d /usr/local/share/man/man1 ] && [ -w /usr/local/share/man/man1 ]; then \
+		cp man/gcal-organizer.1 /usr/local/share/man/man1/; \
+		echo "Man page installed to /usr/local/share/man/man1/"; \
+	elif [ -d $(HOME)/.local/share/man/man1 ] || mkdir -p $(HOME)/.local/share/man/man1 2>/dev/null; then \
+		cp man/gcal-organizer.1 $(HOME)/.local/share/man/man1/; \
+		echo "Man page installed to $(HOME)/.local/share/man/man1/"; \
+	else \
+		echo "Skipping man page install (no writable man directory found)"; \
+	fi
 
 # Clean build artifacts
 clean:

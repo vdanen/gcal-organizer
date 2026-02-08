@@ -1,0 +1,151 @@
+.\" Man page for gcal-organizer
+.TH GCAL-ORGANIZER 1 "February 2026" "v1.1.0" "User Commands"
+.SH NAME
+gcal-organizer \- automate meeting note organization, calendar syncing, and task assignment
+.SH SYNOPSIS
+.B gcal-organizer
+.RI [ command ]
+.RI [ flags ]
+.SH DESCRIPTION
+.B gcal-organizer
+is a CLI tool that automates meeting note organization using Google Workspace APIs
+and Gemini AI. It runs a 3-step workflow:
+.PP
+.B Step 1: Organize
+\- Finds meeting docs matching a naming pattern (e.g.,
+.IR "Notes - Topic - 2026-02-08" )
+and organizes them into topic-based subfolders under a master folder in Google Drive.
+Owned documents are moved; shared documents get shortcuts.
+.PP
+.B Step 2: Sync Calendar
+\- Scans recent calendar events for attachments, creates meeting folders,
+links attachments as Drive shortcuts, and shares folders and attachments
+with all event attendees (writer access).
+.PP
+.B Step 3: Assign Tasks
+\- Extracts checkbox items from Google Docs, uses Gemini AI to identify
+assignees, and automates Chrome via Playwright to click the native
+"Assign as a task" widget in Google Docs.
+.SH COMMANDS
+.TP
+.B run
+Execute the full 3-step workflow.
+.TP
+.B organize
+Step 1 only: organize documents into topic folders.
+.TP
+.B sync-calendar
+Step 2 only: sync calendar attachments to meeting folders.
+.TP
+.B assign-tasks \-\-doc \fIID\fR
+Step 3 only: assign tasks from a specific Google Doc.
+.TP
+.B auth login
+Authenticate with Google via OAuth2.
+.TP
+.B auth status
+Check current authentication status.
+.TP
+.B config show
+Display current configuration.
+.SH FLAGS
+.TP
+.B \-\-dry-run
+Show what would be done without making any changes.
+.TP
+.B \-v, \-\-verbose
+Enable detailed output.
+.TP
+.B \-\-days \fIN\fR
+Number of days to look back for calendar events (default: 8).
+Available on
+.B run
+and
+.B sync-calendar
+commands.
+.TP
+.B \-\-config \fIFILE\fR
+Path to config file (default: ~/.gcal-organizer/config.yaml).
+.SH ENVIRONMENT
+.TP
+.B GEMINI_API_KEY
+Required. GCP API key for Gemini AI.
+.TP
+.B GCAL_MASTER_FOLDER_NAME
+Master folder name in Google Drive (default: "Meeting Notes").
+.TP
+.B GCAL_DAYS_TO_LOOK_BACK
+Days to scan for calendar events (default: 8).
+.TP
+.B GCAL_FILENAME_KEYWORDS
+Comma-separated keywords to filter documents (default: "Notes,Meeting").
+.TP
+.B GCAL_FILENAME_PATTERN
+Regex for parsing document names (default: (.+)\\s*-\\s*(\\d{4}-\\d{2}-\\d{2})).
+.TP
+.B GEMINI_MODEL
+Gemini model to use (default: gemini-1.5-flash).
+.TP
+.B CHROME_PROFILE_PATH
+Path to Chrome profile for browser automation.
+.TP
+.B GCAL_ORGANIZER_BIN
+Override path to the gcal-organizer binary (used by the service wrapper).
+.SH FILES
+.TP
+.I ~/.gcal-organizer/credentials.json
+Google OAuth2 client credentials.
+.TP
+.I ~/.gcal-organizer/token.json
+Stored OAuth2 token (auto-generated on first login).
+.TP
+.I ~/.gcal-organizer/config.yaml
+Configuration file (optional, env vars take precedence).
+.TP
+.I ~/.gcal-organizer/.env
+Environment file loaded by the service wrapper.
+.SH SERVICE
+.B gcal-organizer
+can run as an hourly background service:
+.PP
+.RS
+.B brew services start gcal-organizer
+.RE
+.PP
+Or via Makefile targets:
+.PP
+.RS
+.nf
+make install-service    # Install (auto-detects OS)
+make uninstall-service  # Remove
+make service-status     # Show state
+make service-logs       # Recent logs
+make service-trigger    # Run immediately
+.fi
+.RE
+.PP
+The service runs with GCAL_DAYS_TO_LOOK_BACK=1 to process the last day of events.
+On macOS it uses launchd; on Linux it uses systemd user timers.
+.SH DATA PRIVACY
+Only the text of individual checkbox items is sent to Gemini AI for assignee
+extraction. Full document contents are never uploaded. OAuth tokens and
+credentials are stored locally and never transmitted.
+.SH EXAMPLES
+.TP
+Run the full workflow with verbose output:
+.B gcal-organizer run --verbose
+.TP
+Dry-run to preview changes:
+.B gcal-organizer run --dry-run
+.TP
+Sync only the last 3 days of calendar events:
+.B gcal-organizer sync-calendar --days 3
+.TP
+Assign tasks from a specific document:
+.B gcal-organizer assign-tasks --doc 1aBcDeFgHiJkLmNoPqRsTuVwXyZ
+.SH AUTHORS
+Jason Flowers
+.SH SEE ALSO
+.BR brew-services (1)
+.PP
+Full documentation: https://github.com/jflowers/gcal-organizer

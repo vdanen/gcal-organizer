@@ -57,7 +57,24 @@ Google Drive
 | **Google Chrome** | Task assignment via Playwright | [google.com/chrome](https://www.google.com/chrome/) |
 | **GCP Project** | OAuth2 credentials + Gemini API key | [Setup Guide](docs/SETUP.md) |
 
-### Install & Run
+### Install via Homebrew (macOS & Linux)
+
+```bash
+# Tap and install (includes Node.js dependency + man page)
+brew tap jflowers/gcal-organizer
+brew install gcal-organizer
+
+# Authenticate with Google
+gcal-organizer auth login
+
+# Test with dry-run first
+gcal-organizer run --dry-run --verbose
+
+# Start the hourly service
+brew services start gcal-organizer
+```
+
+### Install from Source
 
 ```bash
 # Clone and build
@@ -65,21 +82,23 @@ git clone https://github.com/jflowers/gcal-organizer.git
 cd gcal-organizer
 make install
 
-# Set up credentials (see docs/SETUP.md for full walkthrough)
-# Then authenticate:
+# Install browser automation dependencies
+cd browser && npm install && cd ..
+
+# Authenticate
 gcal-organizer auth login
 
-# Test with dry-run first
+# Run
 gcal-organizer run --dry-run --verbose
-
-# Run for real
-gcal-organizer run
 ```
 
 ### Run as an Hourly Service
 
 ```bash
-# Install as a background service (macOS launchd or Fedora systemd)
+# Via Homebrew (preferred):
+brew services start gcal-organizer
+
+# Or via Makefile (if installed from source):
 make install-service
 
 # Check status and logs
@@ -94,6 +113,12 @@ make uninstall-service
 ```
 
 The service runs with `GCAL_DAYS_TO_LOOK_BACK=1` to process only the last day of events.
+
+### Man Page
+
+```bash
+man gcal-organizer
+```
 
 ## 🔧 Commands
 
@@ -166,6 +191,7 @@ gcal-organizer/
 ├── deploy/                    # Service files (launchd, systemd)
 ├── .specify/                  # Spec-kit artifacts
 ├── .github/workflows/         # CI/CD (build/test + release)
+├── man/                       # Man page (roff)
 ├── Makefile                   # Build, test, service management
 └── docs/SETUP.md              # Full setup guide
 ```

@@ -64,6 +64,47 @@ As a user, I want to review logs from previous runs to troubleshoot issues.
 - What happens on network failure?
   → API errors are logged, service exits non-zero, runs again next hour
 
+---
+
+### User Story 4 - Homebrew Install (Priority: P1)
+
+As a macOS or Linux user, I want to install gcal-organizer via Homebrew so I get the binary, dependencies, service, and man page in one command.
+
+**Why this priority**: Homebrew is the standard package manager for macOS and widely used on Linux
+
+**Independent Test**: Run `brew install` from the formula, verify binary, man page, and `brew services start` all work
+
+**Acceptance Scenarios**:
+
+1. **Given** the tap is configured, **When** I run `brew install gcal-organizer`, **Then** the binary, man page, and browser dependencies are installed
+2. **Given** gcal-organizer is installed via brew, **When** I run `brew services start gcal-organizer`, **Then** the hourly service starts (launchd on macOS, systemd on Linux)
+3. **Given** I want to remove it, **When** I run `brew uninstall gcal-organizer`, **Then** the binary, man page, and dependencies are removed cleanly
+
+---
+
+### User Story 5 - Man Page (Priority: P2)
+
+As a user, I want to read `man gcal-organizer` for offline reference of all commands, flags, and configuration.
+
+**Why this priority**: Standard CLI convention for discoverability
+
+**Acceptance Scenarios**:
+
+1. **Given** gcal-organizer is installed, **When** I run `man gcal-organizer`, **Then** I see a formatted manual covering commands, flags, env vars, files, and examples
+
+---
+
+### Edge Cases
+
+- What happens when the browser automation (task assignment) runs without a display?
+  → On macOS, launchd runs in the user session and has access to the GUI. On Fedora, the systemd user service runs in the user session; if no display is available, Step 3 (assign-tasks) is skipped gracefully
+- What happens when the machine is asleep during a scheduled run?
+  → macOS launchd will run the job when the machine wakes. systemd timers with `Persistent=true` catch up on missed runs
+- What happens when credentials expire?
+  → The service logs the auth error and exits; user re-authenticates manually
+- What happens on network failure?
+  → API errors are logged, service exits non-zero, runs again next hour
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -75,6 +116,11 @@ As a user, I want to review logs from previous runs to troubleshoot issues.
 - **FR-005**: Service MUST log output with timestamps for troubleshooting
 - **FR-006**: Service MUST provide install/uninstall commands via Makefile targets
 - **FR-007**: Service MUST catch up on missed runs (macOS wake, systemd Persistent=true)
+- **FR-008**: Homebrew formula MUST build from source and declare `node` as a runtime dependency
+- **FR-009**: Homebrew formula MUST include a `service` block for `brew services` (macOS + Linux)
+- **FR-010**: Man page MUST be installed to `man1` and cover all commands, flags, env vars, and files
+- **FR-011**: Homebrew formula MUST install the browser automation scripts and their npm dependencies
+- **FR-012**: Release workflow MUST attach the Homebrew formula to the GitHub Release
 
 ### Configuration Requirements
 
@@ -89,3 +135,7 @@ As a user, I want to review logs from previous runs to troubleshoot issues.
 - **SC-002**: `make install-service` completes in under 5 seconds
 - **SC-003**: Logs from the last 24 hours are easily retrievable
 - **SC-004**: Service survives system reboot (auto-starts on login)
+- **SC-005**: `brew install gcal-organizer` installs binary, man page, and browser deps
+- **SC-006**: `brew services start gcal-organizer` starts the hourly service
+- **SC-007**: `man gcal-organizer` renders the full manual
+

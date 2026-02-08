@@ -2,6 +2,12 @@
 
 This guide walks you through setting up `gcal-organizer` with Google Cloud credentials.
 
+> **Quick install**: If you use Homebrew, you can skip the build steps:
+> ```bash
+> brew tap jflowers/gcal-organizer && brew install gcal-organizer
+> ```
+> Then jump to [Step 1](#step-1-create-a-google-cloud-project) for API setup.
+
 ## Prerequisites
 
 - **Go 1.24** or later
@@ -280,6 +286,12 @@ gcal-organizer run --verbose
 gcal-organizer organize --dry-run
 gcal-organizer sync-calendar --days 14
 gcal-organizer assign-tasks --doc <DOC_ID>
+```
+
+For a complete command reference, run:
+
+```bash
+man gcal-organizer
 ```
 
 See the [README](../README.md) for full usage documentation.

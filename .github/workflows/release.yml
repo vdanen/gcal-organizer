@@ -40,8 +40,28 @@ jobs:
           done
           ls -lh dist/
 
+      - name: Package man page
+        run: |
+          gzip -c man/gcal-organizer.1 > dist/gcal-organizer.1.gz
+
+      - name: Generate Homebrew formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          # Download the tarball to compute SHA
+          curl -sL "$TARBALL_URL" -o /tmp/source.tar.gz
+          SHA256=$(sha256sum /tmp/source.tar.gz | cut -d' ' -f1)
+
+          sed -e "s|v1.1.0|${GITHUB_REF_NAME}|g" \
+              -e "s|PLACEHOLDER_SHA256|${SHA256}|g" \
+              deploy/homebrew/gcal-organizer.rb > dist/gcal-organizer.rb
+
+          echo "Generated formula for ${GITHUB_REF_NAME} (SHA: ${SHA256})"
+          cat dist/gcal-organizer.rb
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: dist/*
+
