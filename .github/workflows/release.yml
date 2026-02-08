@@ -59,12 +59,6 @@ jobs:
           echo "Generated formula for ${GITHUB_REF_NAME} (SHA: ${SHA256})"
           cat dist/gcal-organizer.rb
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: dist/*
-
       - name: Publish formula to Homebrew tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -85,3 +79,10 @@ jobs:
           git add Formula/gcal-organizer.rb
           git commit -m "Update gcal-organizer to ${GITHUB_REF_NAME}" || echo "No changes to commit"
           git push
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
+

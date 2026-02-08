@@ -1,0 +1,140 @@
+name: Build Bottles
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  bottle:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+            tag: arm64_sonoma
+          - os: macos-13
+            arch: x86_64
+            tag: ventura
+          - os: ubuntu-22.04
+            arch: x86_64
+            tag: x86_64_linux
+
+    runs-on: ${{ matrix.os }}
+    name: Bottle (${{ matrix.tag }})
+
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Tap formula
+        run: brew tap jflowers/gcal-organizer
+
+      - name: Install and build bottle
+        run: |
+          brew install --build-bottle jflowers/gcal-organizer/gcal-organizer
+          brew bottle --json --no-rebuild jflowers/gcal-organizer/gcal-organizer
+
+      - name: Upload bottle to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find the generated bottle tarball
+          BOTTLE_FILE=$(ls gcal-organizer--*.tar.gz 2>/dev/null | head -1)
+          if [ -z "$BOTTLE_FILE" ]; then
+            echo "No bottle file found"
+            ls -la
+            exit 1
+          fi
+
+          echo "Uploading bottle: $BOTTLE_FILE"
+          gh release upload "${{ github.event.release.tag_name }}" "$BOTTLE_FILE" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Upload bottle JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottle-${{ matrix.tag }}
+          path: "*.bottle.json"
+
+  update-formula:
+    needs: bottle
+    runs-on: ubuntu-latest
+    name: Update formula with bottles
+
+    steps:
+      - name: Download all bottle JSONs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bottle-*
+          merge-multiple: true
+
+      - name: Generate bottle block
+        id: bottles
+        run: |
+          echo "Generating bottle block from JSON files..."
+          ls -la *.json 2>/dev/null || echo "No JSON files found"
+
+          # Parse bottle JSON files and build the bottle block
+          BOTTLE_BLOCK="  bottle do"
+          ROOT_URL="    root_url \"https://github.com/jflowers/gcal-organizer/releases/download/${{ github.event.release.tag_name }}\""
+          BOTTLE_BLOCK="${BOTTLE_BLOCK}\n${ROOT_URL}"
+
+          for json_file in *.json; do
+            echo "Processing: $json_file"
+            # Extract tag and sha from the bottle JSON
+            TAG=$(cat "$json_file" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          formula = list(data.keys())[0]
+          tags = list(data[formula]['bottle']['tags'].keys())
+          print(tags[0])
+          ")
+            SHA=$(cat "$json_file" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          formula = list(data.keys())[0]
+          tags = list(data[formula]['bottle']['tags'].keys())
+          print(data[formula]['bottle']['tags'][tags[0]]['sha256'])
+          ")
+            echo "  Tag: $TAG, SHA: $SHA"
+            BOTTLE_BLOCK="${BOTTLE_BLOCK}\n    sha256 cellar: :any_skip_relocation, ${TAG}: \"${SHA}\""
+          done
+
+          BOTTLE_BLOCK="${BOTTLE_BLOCK}\n  end"
+
+          echo "Generated bottle block:"
+          echo -e "$BOTTLE_BLOCK"
+
+          # Save for next step
+          echo -e "$BOTTLE_BLOCK" > /tmp/bottle_block.txt
+
+      - name: Clone tap and update formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/jflowers/homebrew-gcal-organizer.git" /tmp/tap
+          cd /tmp/tap
+
+          FORMULA="Formula/gcal-organizer.rb"
+          BOTTLE_BLOCK=$(cat /tmp/bottle_block.txt)
+
+          # Remove existing bottle block if present
+          sed -i '/^  bottle do$/,/^  end$/d' "$FORMULA"
+
+          # Insert bottle block after license line
+          sed -i "/^  license/a\\
+          \\
+          ${BOTTLE_BLOCK}" "$FORMULA"
+
+          echo "Updated formula:"
+          cat "$FORMULA"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$FORMULA"
+          git commit -m "Add bottles for ${{ github.event.release.tag_name }}" || echo "No changes"
+          git push
