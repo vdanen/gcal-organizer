@@ -3,6 +3,7 @@ package config
 
 import (
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/jflowers/gcal-organizer/internal/ux"
@@ -48,6 +49,13 @@ type Config struct {
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
+
+	// Default Chrome profile path depends on OS
+	chromePath := home + "/Library/Application Support/Google/Chrome/Profile 1"
+	if runtime.GOOS == "linux" {
+		chromePath = home + "/.config/google-chrome/Default"
+	}
+
 	return &Config{
 		MasterFolderName:  "Meeting Notes",
 		DaysToLookBack:    8,
@@ -56,7 +64,7 @@ func DefaultConfig() *Config {
 		GeminiModel:       "gemini-2.0-flash",
 		CredentialsFile:   home + "/.gcal-organizer/credentials.json",
 		TokenFile:         home + "/.gcal-organizer/token.json",
-		ChromeProfilePath: home + "/Library/Application Support/Google/Chrome/Profile 1",
+		ChromeProfilePath: chromePath,
 	}
 }
 

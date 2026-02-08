@@ -9,6 +9,7 @@ gcal-organizer is a tool that automates the lifecycle of meeting notes by:
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/jflowers/gcal-organizer/internal/auth"
 	"github.com/jflowers/gcal-organizer/internal/calendar"
@@ -763,7 +765,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gcal-organizer/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gcal-organizer/.env)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "show what would be done without making changes")
 
@@ -799,27 +801,60 @@ func init() {
 }
 
 func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			os.Exit(1)
-		}
-
-		viper.AddConfigPath(home + "/.gcal-organizer")
-		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
+	// Load .env file into process environment so viper picks up the values
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
 	}
+
+	envFile := cfgFile
+	if envFile == "" {
+		envFile = filepath.Join(home, ".gcal-organizer", ".env")
+	}
+
+	loadDotEnv(envFile, home)
 
 	viper.AutomaticEnv()
 
 	// Wire --verbose to charm log level
 	logging.SetVerbose(verbose)
+}
 
-	if err := viper.ReadInConfig(); err == nil {
-		logging.Logger.Debug("Using config file", "path", viper.ConfigFileUsed())
+// loadDotEnv reads a .env file and sets any KEY=VALUE pairs as environment
+// variables, but only if they are not already set (env vars take precedence).
+// Tilde (~) in values is expanded to the user's home directory.
+func loadDotEnv(path, home string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return // .env is optional
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+
+		// Expand ~ to home directory
+		if strings.HasPrefix(val, "~/") {
+			val = home + val[1:]
+		} else if val == "~" {
+			val = home
+		}
+
+		// Only set if not already in environment (explicit env vars win)
+		if _, exists := os.LookupEnv(key); !exists {
+			os.Setenv(key, val)
+		}
 	}
 }
 
