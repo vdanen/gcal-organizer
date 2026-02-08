@@ -32,5 +32,5 @@ else
 fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting gcal-organizer run"
-"$BINARY" run --verbose
+"$BINARY" run #--verbose
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Completed gcal-organizer run"

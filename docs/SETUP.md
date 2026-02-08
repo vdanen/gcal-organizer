@@ -4,7 +4,9 @@ This guide walks you through setting up `gcal-organizer` with Google Cloud crede
 
 ## Prerequisites
 
-- Go 1.21 or later
+- **Go 1.24** or later
+- **Node.js 18+** and npm (for browser-based task assignment)
+- **Google Chrome** (for task assignment via Playwright)
 - A Google account with access to:
   - Google Drive
   - Google Calendar
@@ -121,10 +123,13 @@ export MASTER_FOLDER_NAME="Meeting Notes"
 # Clone and build
 git clone https://github.com/jflowers/gcal-organizer.git
 cd gcal-organizer
-go build -o gcal-organizer ./cmd/gcal-organizer
+make install
+
+# Install browser automation dependencies (for assign-tasks)
+cd browser && npm install && cd ..
 
 # First run - this will open a browser for OAuth
-./gcal-organizer auth login
+gcal-organizer auth login
 ```
 
 The OAuth flow will:
@@ -138,11 +143,48 @@ The OAuth flow will:
 
 ```bash
 # Check configuration
-./gcal-organizer config show
+gcal-organizer config show
 
 # Test with dry-run (no changes made)
-./gcal-organizer run --dry-run --verbose
+gcal-organizer run --dry-run --verbose
 ```
+
+---
+
+## Browser Automation Setup
+
+Step 3 (task assignment) uses [Playwright](https://playwright.dev/) to interact with the Google Docs UI. This is necessary because the Google Docs API does **not** provide access to the native "Assign as a task" widget — it's a canvas-rendered UI element with no API equivalent.
+
+### Why Browser Automation?
+
+The Google Docs API can read document text and checkbox state, but cannot:
+- Interact with the "Assign to" tooltip on checkboxes
+- Trigger the native Google Tasks integration built into Docs
+- Click UI buttons rendered on the canvas
+
+Playwright automates Chrome to hover over checkboxes, detect the "Assign" tooltip, and click it — the only way to use this feature programmatically.
+
+### Chrome Profile Configuration
+
+The tool launches Chrome with your existing profile so it's already authenticated with Google. The default profile path is:
+
+| OS | Default Path |
+|----|-------------|
+| **macOS** | `~/Library/Application Support/Google/Chrome/Profile 1` |
+| **Linux** | `~/.config/google-chrome/Profile 1` |
+
+To use a different profile, set the `CHROME_PROFILE_PATH` environment variable:
+
+```bash
+export CHROME_PROFILE_PATH="$HOME/Library/Application Support/Google/Chrome/Default"
+```
+
+> **Note**: You can find your Chrome profile path by navigating to `chrome://version` in Chrome and looking at the "Profile Path" field.
+
+### Troubleshooting Browser Automation
+
+- **"Browser closed unexpectedly"**: Make sure Chrome is not already running, or that remote debugging is not conflicting with another instance.
+- **Tasks not assigned**: The script uses a hover-then-detect pattern. Ensure the Google Doc has the "Suggested next steps" checkboxes visible.
 
 ---
 
@@ -195,12 +237,34 @@ rm ~/.gcal-organizer/token.json
 
 ---
 
-## Security Notes
+## Data Privacy
 
-- **Never commit credentials**: `credentials.json` and `token.json` are in `.gitignore`
-- **Token storage**: Tokens are stored locally at `~/.gcal-organizer/token.json`
-- **Minimal scopes**: The app requests only the scopes it needs
-- **Offline access**: The token includes refresh capability for long-running use
+- **What goes to Gemini AI**: Only the text of individual checkbox items (e.g., `"@jordan review the API spec by Friday"`). Full document contents are **never** uploaded.
+- **What stays local**: OAuth tokens (`token.json`), credentials (`credentials.json`), and config are stored at `~/.gcal-organizer/` and never transmitted.
+- **Scopes are minimal**: The app requests only the scopes it needs (see table above).
+- **Offline access**: The token includes refresh capability for long-running use.
+
+---
+
+## Running as a Service
+
+Once setup is complete, you can install gcal-organizer as an hourly background service:
+
+```bash
+# Install (auto-detects macOS launchd vs Fedora systemd)
+make install-service
+
+# Check status
+make service-status
+
+# View logs
+make service-logs
+
+# Uninstall
+make uninstall-service
+```
+
+The service runs with `GCAL_DAYS_TO_LOOK_BACK=1` so it only processes the last day of events.
 
 ---
 
@@ -210,12 +274,12 @@ Once setup is complete:
 
 ```bash
 # Run the full workflow
-./gcal-organizer run --verbose
+gcal-organizer run --verbose
 
 # Or run individual steps
-./gcal-organizer organize --dry-run
-./gcal-organizer sync-calendar --days 14
-./gcal-organizer extract-tasks --doc <DOC_ID>
+gcal-organizer organize --dry-run
+gcal-organizer sync-calendar --days 14
+gcal-organizer assign-tasks --doc <DOC_ID>
 ```
 
 See the [README](../README.md) for full usage documentation.
