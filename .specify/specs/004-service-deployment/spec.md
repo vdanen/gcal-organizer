@@ -105,10 +105,13 @@ As a user, I want to read `man gcal-organizer` for offline reference of all comm
 - **FR-006**: Service MUST provide install/uninstall via `gcal-organizer install`/`uninstall` commands (Makefile targets retained for developers)
 - **FR-007**: Service MUST catch up on missed runs (macOS wake, systemd Persistent=true)
 - **FR-008**: Homebrew formula MUST build from source and declare `node` as a runtime dependency
-- **FR-009**: Homebrew formula MUST include a `service` block for `brew services` (macOS + Linux)
+- **FR-009**: Homebrew formula caveats MUST reference all self-service commands (`init`, `auth login`, `setup-browser`, `doctor`, `install`)
 - **FR-010**: Man page MUST be installed to `man1` and cover all commands, flags, env vars, and files
 - **FR-011**: Homebrew formula MUST install the browser automation scripts and their npm dependencies
 - **FR-012**: Release workflow MUST attach the Homebrew formula to the GitHub Release
+- **FR-013**: A Homebrew tap (`jflowers/homebrew-gcal-organizer`) MUST exist for `brew tap` + `brew install`
+- **FR-014**: Release workflow MUST auto-publish the updated formula to the tap on every tagged release
+- **FR-015**: Pre-compiled bottles MUST be built for macOS (arm64, x86_64) and Linux (x86_64) on release
 
 ### Configuration Requirements
 
@@ -124,6 +127,8 @@ As a user, I want to read `man gcal-organizer` for offline reference of all comm
 - **SC-003**: Logs from the last 24 hours are easily retrievable
 - **SC-004**: Service survives system reboot (auto-starts on login)
 - **SC-005**: `brew install gcal-organizer` installs binary, man page, and browser deps
-- **SC-006**: `brew services start gcal-organizer` starts the hourly service
+- **SC-006**: `gcal-organizer install` starts the hourly service (replaces `brew services`)
 - **SC-007**: `man gcal-organizer` renders the full manual
+- **SC-008**: `brew tap jflowers/gcal-organizer` taps the formula successfully
+- **SC-009**: Bottles are available for macOS and Linux after a release
 

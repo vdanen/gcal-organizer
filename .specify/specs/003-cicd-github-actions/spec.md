@@ -47,6 +47,8 @@ As a developer, I want pushing a version tag (e.g., `v1.1.0`) to automatically c
   → `gofmt -l` lists them and the workflow fails
 - What happens when a tag is pushed on a broken commit?
   → Release workflow depends on CI passing first
+- What happens when system Go version doesn't match project Go version?
+  → Pre-push hook auto-detects goenv Go 1.24.6; CI uses `actions/setup-go` with `1.24`
 
 ## Requirements *(mandatory)*
 
@@ -62,6 +64,11 @@ As a developer, I want pushing a version tag (e.g., `v1.1.0`) to automatically c
 - **FR-008**: Release workflow MUST create a GitHub Release with the binaries attached
 - **FR-009**: Release workflow MUST generate a versioned Homebrew formula with correct SHA256
 - **FR-010**: Release workflow MUST package and attach the man page to the release
+- **FR-011**: CI workflow MUST check that `go mod tidy` produces no diff to go.mod/go.sum
+- **FR-012**: A `make ci` target MUST exist that mirrors GitHub Actions CI checks exactly (check-only gofmt, go mod tidy diff, vet, build, test -race)
+- **FR-013**: Pre-push hooks SHOULD be available via `make install-hooks` to catch CI failures locally
+- **FR-014**: Release workflow MUST auto-publish the Homebrew formula to the tap repo (`jflowers/homebrew-gcal-organizer`)
+- **FR-015**: A bottle build workflow MUST build pre-compiled bottles for macOS (arm64, x86_64) and Linux (x86_64) on release
 
 ## Success Criteria *(mandatory)*
 
@@ -70,3 +77,5 @@ As a developer, I want pushing a version tag (e.g., `v1.1.0`) to automatically c
 - **SC-001**: Every push to `main` triggers a CI run that completes within 3 minutes
 - **SC-002**: Failed checks are clearly reported with actionable error messages
 - **SC-003**: Pushing a version tag produces a GitHub Release with downloadable binaries within 5 minutes
+- **SC-004**: Bottles are built and uploaded to the release within 15 minutes of release creation
+- **SC-005**: `make ci` locally produces the same pass/fail result as GitHub Actions CI

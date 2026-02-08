@@ -105,6 +105,8 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 - **FR-012**: Self-service commands SHOULD use `charmbracelet/huh` for interactive prompts (API key, Chrome profile selection)
 - **FR-013**: Self-service commands SHOULD use `charmbracelet/lipgloss` for styled terminal output
 - **FR-014**: User-facing error messages MUST include a reference to `gcal-organizer doctor` for diagnostics
+- **FR-015**: `gcal-organizer setup-browser` MUST provide guided browser setup: Node.js check, npm dependency install, Chrome profile selection via `charmbracelet/huh`, Chrome launch with `--remote-debugging-port=9222`, and CDP verification
+- **FR-016**: `doctor` and `init` MUST use `charmbracelet/lipgloss` styled summary boxes for polished output
 
 ### Non-Functional Requirements
 

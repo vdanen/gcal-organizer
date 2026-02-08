@@ -185,6 +185,7 @@ As a user, I want to view my current configuration to verify settings are correc
 - **FR-011**: System MUST share calendar event attachments with all attendees (writer access) when the user has edit access to the attachment
 - **FR-012**: System MUST skip sharing attachments the user does not have edit access to, with a verbose log message
 - **FR-013**: System MUST use `charmbracelet/log` for leveled, colorful, structured logging with `--verbose` controlling debug output
+- **FR-014**: `run` command MUST accept `--days` flag to override `GCAL_DAYS_TO_LOOK_BACK` for the current execution
 
 ### Configuration Requirements
 
