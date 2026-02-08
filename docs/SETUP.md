@@ -83,6 +83,10 @@ mv ~/Downloads/client_secret_*.json ~/.gcal-organizer/credentials.json
 3. Select your project or create a new one
 4. Copy the API key
 
+> **Note**: You can find your API key in the [API keys](https://console.cloud.google.com/apis/credentials) page in the Google Cloud Console.
+
+**Your Company may have a different process for getting a Gemini API key.**
+
 ---
 
 ## Step 5: Configure the Application
