@@ -102,6 +102,8 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 - **FR-009**: `gcal-organizer uninstall` MUST stop and remove all service files
 - **FR-010**: All error messages MUST include a `Fix:` line with exact resolution steps
 - **FR-011**: `gcal-organizer init` MUST be idempotent — skip existing files, fill in missing ones
+- **FR-012**: Self-service commands SHOULD use `charmbracelet/huh` for interactive prompts (API key, Chrome profile selection)
+- **FR-013**: Self-service commands SHOULD use `charmbracelet/lipgloss` for styled terminal output
 
 ### Non-Functional Requirements
 

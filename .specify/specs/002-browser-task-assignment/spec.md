@@ -100,6 +100,8 @@ As a user running `gcal-organizer run`, I want task assignment to happen automat
 - **FR-012**: System MUST provide verbose debug logging showing KEY, FILL, HOVER, CLICK, TOOLTIP actions
 - **FR-013**: System MUST sanitize control characters from Google Docs API text (Go-side unicode + TS-side regex)
 - **FR-014**: System MUST be integrated as Step 3 in the `run` command's full workflow
+- **FR-015**: CLI MUST provide `setup-browser` command to launch Chrome with debugging port and guide Google account authentication
+- **FR-016**: `doctor` MUST check browser automation readiness (npm deps in `browser/`, Chrome debugging port 9222)
 
 ### Configuration Requirements
 

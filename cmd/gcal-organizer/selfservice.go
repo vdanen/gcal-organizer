@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,9 +12,43 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 )
+
+// --- Lip Gloss styles ---
+
+var (
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("212")).
+			PaddingLeft(1)
+
+	successStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("10"))
+
+	warnStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("11"))
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("9"))
+
+	subtleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241"))
+
+	boxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(0, 1)
+)
+
+func styledPass(msg string) string  { return successStyle.Render("  ✅ " + msg) }
+func styledWarn(msg string) string  { return warnStyle.Render("  ⚠️  " + msg) }
+func styledFail(msg string) string  { return errorStyle.Render("  ❌ " + msg) }
+func styledFix(msg string) string   { return subtleStyle.Render("     Fix: " + msg) }
+func styledTitle(msg string) string { return titleStyle.Render(msg) }
 
 // doctorCmd checks system health and reports issues with fixes.
 var doctorCmd = &cobra.Command{
@@ -26,40 +62,39 @@ var doctorCmd = &cobra.Command{
 		warned := 0
 		failed := 0
 
-		fmt.Println("🩺 gcal-organizer doctor")
-		fmt.Println("═══════════════════════════════════════════════════════════")
+		fmt.Println(styledTitle("🩺 gcal-organizer doctor"))
 		fmt.Println()
 
 		// 1. Config directory
 		if info, err := os.Stat(configDir); err == nil && info.IsDir() {
-			fmt.Println("  ✅ Config directory exists")
+			fmt.Println(styledPass("Config directory exists"))
 			passed++
 		} else {
-			fmt.Println("  ❌ Config directory ~/.gcal-organizer/ not found")
-			fmt.Println("     Fix: Run 'gcal-organizer init'")
+			fmt.Println(styledFail("Config directory ~/.gcal-organizer/ not found"))
+			fmt.Println(styledFix("Run 'gcal-organizer init'"))
 			failed++
 		}
 
 		// 2. .env file
 		envFile := filepath.Join(configDir, ".env")
 		if _, err := os.Stat(envFile); err == nil {
-			fmt.Println("  ✅ Environment file (.env) exists")
+			fmt.Println(styledPass("Environment file (.env) exists"))
 			passed++
 		} else {
-			fmt.Println("  ❌ Environment file ~/.gcal-organizer/.env not found")
-			fmt.Println("     Fix: Run 'gcal-organizer init'")
+			fmt.Println(styledFail("Environment file ~/.gcal-organizer/.env not found"))
+			fmt.Println(styledFix("Run 'gcal-organizer init'"))
 			failed++
 		}
 
 		// 3. credentials.json
 		credFile := filepath.Join(configDir, "credentials.json")
 		if _, err := os.Stat(credFile); err == nil {
-			fmt.Println("  ✅ Google credentials (credentials.json) found")
+			fmt.Println(styledPass("Google credentials (credentials.json) found"))
 			passed++
 		} else {
-			fmt.Println("  ❌ Google credentials not found at", credFile)
-			fmt.Println("     Fix: Download from https://console.cloud.google.com/apis/credentials")
-			fmt.Println("          Save as ~/.gcal-organizer/credentials.json")
+			fmt.Println(styledFail("Google credentials not found at " + credFile))
+			fmt.Println(styledFix("Download from https://console.cloud.google.com/apis/credentials"))
+			fmt.Println(subtleStyle.Render("          Save as ~/.gcal-organizer/credentials.json"))
 			failed++
 		}
 
@@ -73,22 +108,22 @@ var doctorCmd = &cobra.Command{
 				var tok oauth2.Token
 				if err := json.NewDecoder(f).Decode(&tok); err == nil {
 					if tok.Expiry.After(time.Now()) || tok.RefreshToken != "" {
-						fmt.Println("  ✅ OAuth token found (authenticated)")
+						fmt.Println(styledPass("OAuth token found (authenticated)"))
 						passed++
 					} else {
-						fmt.Println("  ⚠️  OAuth token exists but may be expired")
-						fmt.Println("     Fix: Run 'gcal-organizer auth login' to re-authenticate")
+						fmt.Println(styledWarn("OAuth token exists but may be expired"))
+						fmt.Println(styledFix("Run 'gcal-organizer auth login' to re-authenticate"))
 						warned++
 					}
 				} else {
-					fmt.Println("  ⚠️  OAuth token file is corrupted")
-					fmt.Println("     Fix: Run 'gcal-organizer auth login' to re-authenticate")
+					fmt.Println(styledWarn("OAuth token file is corrupted"))
+					fmt.Println(styledFix("Run 'gcal-organizer auth login' to re-authenticate"))
 					warned++
 				}
 			}
 		} else {
-			fmt.Println("  ❌ Not authenticated — no OAuth token found")
-			fmt.Println("     Fix: Run 'gcal-organizer auth login'")
+			fmt.Println(styledFail("Not authenticated — no OAuth token found"))
+			fmt.Println(styledFix("Run 'gcal-organizer auth login'"))
 			failed++
 		}
 
@@ -99,27 +134,26 @@ var doctorCmd = &cobra.Command{
 			apiKey = loadEnvValue(envFile, "GEMINI_API_KEY")
 		}
 		if apiKey != "" && apiKey != "your-gcp-api-key-here" {
-			fmt.Printf("  ✅ GEMINI_API_KEY is set (%s****)\n", apiKey[:4])
+			fmt.Println(styledPass(fmt.Sprintf("GEMINI_API_KEY is set (%s****)", apiKey[:4])))
 			passed++
 		} else if apiKey == "your-gcp-api-key-here" {
-			fmt.Println("  ❌ GEMINI_API_KEY is still set to placeholder value")
-			fmt.Println("     Fix: Get your API key from https://aistudio.google.com/app/apikey")
-			fmt.Println("          Set it in ~/.gcal-organizer/.env")
+			fmt.Println(styledFail("GEMINI_API_KEY is still set to placeholder value"))
+			fmt.Println(styledFix("Get your API key from https://aistudio.google.com/app/apikey"))
 			failed++
 		} else {
-			fmt.Println("  ❌ GEMINI_API_KEY is not set")
-			fmt.Println("     Fix: Set GEMINI_API_KEY in ~/.gcal-organizer/.env or run 'gcal-organizer init'")
+			fmt.Println(styledFail("GEMINI_API_KEY is not set"))
+			fmt.Println(styledFix("Run 'gcal-organizer init' or set in ~/.gcal-organizer/.env"))
 			failed++
 		}
 
 		// 6. Node.js
 		if nodeOut, err := exec.Command("node", "--version").Output(); err == nil {
 			version := strings.TrimSpace(string(nodeOut))
-			fmt.Printf("  ✅ Node.js found (%s)\n", version)
+			fmt.Println(styledPass(fmt.Sprintf("Node.js found (%s)", version)))
 			passed++
 		} else {
-			fmt.Println("  ⚠️  Node.js not found — Step 3 (task assignment) will be unavailable")
-			fmt.Println("     Fix: Install Node.js 18+ from https://nodejs.org")
+			fmt.Println(styledWarn("Node.js not found — task assignment unavailable"))
+			fmt.Println(styledFix("Install Node.js 18+ from https://nodejs.org"))
 			warned++
 		}
 
@@ -127,45 +161,68 @@ var doctorCmd = &cobra.Command{
 		chromePath := detectChromeProfile()
 		if chromePath != "" {
 			if _, err := os.Stat(chromePath); err == nil {
-				fmt.Printf("  ✅ Chrome profile found (%s)\n", filepath.Base(chromePath))
+				fmt.Println(styledPass(fmt.Sprintf("Chrome profile found (%s)", filepath.Base(chromePath))))
 				passed++
 			} else {
-				fmt.Printf("  ⚠️  Chrome profile not found at %s\n", chromePath)
-				fmt.Println("     Fix: Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env")
-				fmt.Println("          Find yours at chrome://version → 'Profile Path'")
+				fmt.Println(styledWarn(fmt.Sprintf("Chrome profile not found at %s", chromePath)))
+				fmt.Println(styledFix("Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env"))
 				warned++
 			}
 		} else {
-			fmt.Println("  ⚠️  Chrome profile path not detected")
-			fmt.Println("     Fix: Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env")
+			fmt.Println(styledWarn("Chrome profile path not detected"))
+			fmt.Println(styledFix("Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env"))
 			warned++
 		}
 
 		// 8. Service status
 		if isServiceInstalled() {
-			fmt.Println("  ✅ Hourly service is installed")
+			fmt.Println(styledPass("Hourly service is installed"))
 			passed++
 		} else {
-			fmt.Println("  ⚠️  Hourly service is not installed")
-			fmt.Println("     Fix: Run 'gcal-organizer install' to set up the hourly service")
+			fmt.Println(styledWarn("Hourly service is not installed"))
+			fmt.Println(styledFix("Run 'gcal-organizer install'"))
+			warned++
+		}
+
+		// 9. Browser deps (npm install in browser/)
+		browserDir := findBrowserDir()
+		if browserDir != "" {
+			nodeModules := filepath.Join(browserDir, "node_modules")
+			if _, err := os.Stat(nodeModules); err == nil {
+				fmt.Println(styledPass("Browser automation deps installed"))
+				passed++
+			} else {
+				fmt.Println(styledWarn("Browser automation deps not installed"))
+				fmt.Println(styledFix("Run 'gcal-organizer setup-browser'"))
+				warned++
+			}
+		} else {
+			fmt.Println(styledWarn("Browser directory not found"))
+			fmt.Println(styledFix("Run from project root or install browser automation"))
+			warned++
+		}
+
+		// 10. Chrome debugging port
+		if isPortOpen(9222) {
+			fmt.Println(styledPass("Chrome debugging port (9222) is active"))
+			passed++
+		} else {
+			fmt.Println(styledWarn("Chrome debugging port (9222) not active"))
+			fmt.Println(styledFix("Run 'gcal-organizer setup-browser' to launch Chrome"))
 			warned++
 		}
 
 		// Summary
 		fmt.Println()
-		fmt.Println("───────────────────────────────────────────────────────────")
-		fmt.Printf("  ✅ %d passed  ⚠️  %d warnings  ❌ %d failed\n", passed, warned, failed)
+		summaryLine := fmt.Sprintf("  ✅ %d passed  ⚠️  %d warnings  ❌ %d failed", passed, warned, failed)
+		fmt.Println(boxStyle.Render(summaryLine))
 		if failed > 0 {
-			fmt.Println()
-			fmt.Println("  Run 'gcal-organizer init' to fix most issues.")
+			fmt.Println(subtleStyle.Render("  Run 'gcal-organizer init' to fix most issues."))
 		} else if warned > 0 {
-			fmt.Println()
-			fmt.Println("  All critical checks passed! Warnings are informational.")
+			fmt.Println(subtleStyle.Render("  All critical checks passed. Warnings are informational."))
 		} else {
-			fmt.Println()
-			fmt.Println("  🎉 Everything looks good!")
+			fmt.Println(successStyle.Render("  🎉 Everything looks good!"))
 		}
-		fmt.Println("═══════════════════════════════════════════════════════════")
 		return nil
 	},
 }
@@ -182,8 +239,7 @@ var initCmd = &cobra.Command{
 		nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
 		apiKey, _ := cmd.Flags().GetString("api-key")
 
-		fmt.Println("🚀 gcal-organizer init")
-		fmt.Println("═══════════════════════════════════════════════════════════")
+		fmt.Println(styledTitle("🚀 gcal-organizer init"))
 		fmt.Println()
 
 		// 1. Create config directory
@@ -191,18 +247,27 @@ var initCmd = &cobra.Command{
 			if err := os.MkdirAll(configDir, 0700); err != nil {
 				return fmt.Errorf("failed to create config directory: %w", err)
 			}
-			fmt.Println("  ✅ Created ~/.gcal-organizer/")
+			fmt.Println(styledPass("Created ~/.gcal-organizer/"))
 		} else {
-			fmt.Println("  ✅ Config directory already exists")
+			fmt.Println(styledPass("Config directory already exists"))
 		}
 
 		// 2. Generate .env file
 		if _, err := os.Stat(envFile); os.IsNotExist(err) {
 			// Get API key
 			if apiKey == "" && !nonInteractive {
-				fmt.Println()
-				fmt.Print("  Enter your Gemini API key (from https://aistudio.google.com/app/apikey): ")
-				fmt.Scanln(&apiKey)
+				form := huh.NewForm(
+					huh.NewGroup(
+						huh.NewInput().
+							Title("Gemini API Key").
+							Description("From https://aistudio.google.com/app/apikey").
+							Placeholder("AIza...").
+							Value(&apiKey),
+					),
+				)
+				if err := form.Run(); err != nil {
+					apiKey = ""
+				}
 			}
 			if apiKey == "" {
 				apiKey = "your-gcp-api-key-here"
@@ -216,13 +281,12 @@ var initCmd = &cobra.Command{
 			if err := os.WriteFile(envFile, []byte(envContent), 0600); err != nil {
 				return fmt.Errorf("failed to write .env file: %w", err)
 			}
-			fmt.Println("  ✅ Created ~/.gcal-organizer/.env")
+			fmt.Println(styledPass("Created ~/.gcal-organizer/.env"))
 		} else {
-			fmt.Println("  ✅ Environment file already exists (skipped)")
-			// Check if API key is still placeholder
+			fmt.Println(styledPass("Environment file already exists (skipped)"))
 			existing := loadEnvValue(envFile, "GEMINI_API_KEY")
 			if existing == "your-gcp-api-key-here" {
-				fmt.Println("  ⚠️  GEMINI_API_KEY is still set to placeholder — edit ~/.gcal-organizer/.env")
+				fmt.Println(styledWarn("GEMINI_API_KEY is still set to placeholder — edit ~/.gcal-organizer/.env"))
 			}
 		}
 
@@ -230,31 +294,28 @@ var initCmd = &cobra.Command{
 		credFile := filepath.Join(configDir, "credentials.json")
 		if _, err := os.Stat(credFile); os.IsNotExist(err) {
 			fmt.Println()
-			fmt.Println("  ⚠️  credentials.json not found")
-			fmt.Println("     Download OAuth credentials from Google Cloud Console:")
-			fmt.Println("     https://console.cloud.google.com/apis/credentials")
-			fmt.Println("     Save as: ~/.gcal-organizer/credentials.json")
+			fmt.Println(styledWarn("credentials.json not found"))
+			fmt.Println(styledFix("Download OAuth credentials from Google Cloud Console:"))
+			fmt.Println(subtleStyle.Render("     https://console.cloud.google.com/apis/credentials"))
+			fmt.Println(subtleStyle.Render("     Save as: ~/.gcal-organizer/credentials.json"))
 		} else {
-			fmt.Println("  ✅ Google credentials found")
+			fmt.Println(styledPass("Google credentials found"))
 		}
 
-		// 4. Summary
 		fmt.Println()
-		fmt.Println("───────────────────────────────────────────────────────────")
-		fmt.Println("  Next steps:")
+		var nextSteps string
 		if _, err := os.Stat(credFile); os.IsNotExist(err) {
-			fmt.Println("  1. Download credentials.json (see above)")
-			fmt.Println("  2. Run 'gcal-organizer auth login'")
+			nextSteps = "  Next steps:\n  1. Download credentials.json (see above)\n  2. Run 'gcal-organizer auth login'"
 		} else {
 			tokenFile := filepath.Join(configDir, "token.json")
 			if _, err := os.Stat(tokenFile); os.IsNotExist(err) {
-				fmt.Println("  1. Run 'gcal-organizer auth login'")
+				nextSteps = "  Next steps:\n  1. Run 'gcal-organizer auth login'"
 			} else {
-				fmt.Println("  1. Run 'gcal-organizer run --dry-run' to test")
+				nextSteps = "  Next steps:\n  1. Run 'gcal-organizer run --dry-run' to test"
 			}
 		}
-		fmt.Println("  2. Run 'gcal-organizer doctor' to verify setup")
-		fmt.Println("═══════════════════════════════════════════════════════════")
+		nextSteps += "\n  2. Run 'gcal-organizer doctor' to verify setup"
+		fmt.Println(boxStyle.Render(nextSteps))
 		return nil
 	},
 }
@@ -646,4 +707,277 @@ RandomizedDelaySec=120
 [Install]
 WantedBy=timers.target
 `
+}
+
+// setupBrowserCmd guides the user through browser setup for task assignment.
+var setupBrowserCmd = &cobra.Command{
+	Use:   "setup-browser",
+	Short: "Set up Chrome for browser-based task assignment",
+	Long: `Launch Chrome with remote debugging and guide authentication.
+
+This command:
+  1. Checks Node.js is installed
+  2. Installs browser automation dependencies (npm install)
+  3. Detects or prompts for Chrome profile selection
+  4. Launches Chrome with --remote-debugging-port=9222
+  5. Waits for you to sign in to Google
+  6. Verifies Chrome is accessible via CDP`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		home, _ := os.UserHomeDir()
+		configDir := filepath.Join(home, ".gcal-organizer")
+		envFile := filepath.Join(configDir, ".env")
+
+		fmt.Println(styledTitle("🌐 gcal-organizer setup-browser"))
+		fmt.Println()
+
+		// Step 1: Check Node.js
+		fmt.Println(subtleStyle.Render("  Step 1/5: Checking Node.js..."))
+		nodeOut, err := exec.Command("node", "--version").Output()
+		if err != nil {
+			fmt.Println(styledFail("Node.js is required but not found"))
+			fmt.Println(styledFix("Install Node.js 18+ from https://nodejs.org"))
+			return fmt.Errorf("Node.js is required for browser automation")
+		}
+		fmt.Println(styledPass(fmt.Sprintf("Node.js %s", strings.TrimSpace(string(nodeOut)))))
+
+		// Step 2: Install browser deps
+		fmt.Println()
+		fmt.Println(subtleStyle.Render("  Step 2/5: Checking browser automation dependencies..."))
+		browserDir := findBrowserDir()
+		if browserDir == "" {
+			fmt.Println(styledFail("Browser directory not found"))
+			fmt.Println(styledFix("Run from the project root or check your installation"))
+			return fmt.Errorf("browser directory not found")
+		}
+
+		nodeModules := filepath.Join(browserDir, "node_modules")
+		if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
+			fmt.Println(subtleStyle.Render("     Installing npm dependencies..."))
+			npmCmd := exec.Command("npm", "install")
+			npmCmd.Dir = browserDir
+			npmCmd.Stdout = os.Stdout
+			npmCmd.Stderr = os.Stderr
+			if err := npmCmd.Run(); err != nil {
+				fmt.Println(styledFail("npm install failed"))
+				return fmt.Errorf("npm install failed: %w", err)
+			}
+			fmt.Println(styledPass("Browser dependencies installed"))
+		} else {
+			fmt.Println(styledPass("Browser dependencies already installed"))
+		}
+
+		// Step 3: Detect/select Chrome profile
+		fmt.Println()
+		fmt.Println(subtleStyle.Render("  Step 3/5: Detecting Chrome profile..."))
+
+		// Check env first
+		chromePath := loadEnvValue(envFile, "CHROME_PROFILE_PATH")
+		if chromePath == "" {
+			chromePath = detectChromeProfile()
+		}
+
+		// Try to discover all profiles and let user pick
+		profiles := discoverChromeProfiles()
+		if len(profiles) > 1 {
+			// Use Huh to let user select
+			options := make([]huh.Option[string], len(profiles))
+			for i, p := range profiles {
+				label := filepath.Base(p)
+				if p == chromePath {
+					label += " (detected)"
+				}
+				options[i] = huh.NewOption(label, p)
+			}
+
+			var selected string
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Select Chrome profile").
+						Description("Multiple profiles found. Choose which one is signed into Google.").
+						Options(options...).
+						Value(&selected),
+				),
+			)
+			if err := form.Run(); err != nil {
+				return fmt.Errorf("profile selection cancelled: %w", err)
+			}
+			chromePath = selected
+		}
+
+		if chromePath == "" {
+			fmt.Println(styledWarn("No Chrome profile detected"))
+			fmt.Println(styledFix("Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env"))
+			fmt.Println(subtleStyle.Render("     Find yours at chrome://version → 'Profile Path'"))
+			return fmt.Errorf("Chrome profile not found")
+		}
+		fmt.Println(styledPass(fmt.Sprintf("Using profile: %s", filepath.Base(chromePath))))
+
+		// Save to .env if not already set
+		existingPath := loadEnvValue(envFile, "CHROME_PROFILE_PATH")
+		if existingPath != chromePath && existingPath != "" {
+			fmt.Println(subtleStyle.Render(fmt.Sprintf("     Updated CHROME_PROFILE_PATH in .env")))
+		}
+
+		// Step 4: Launch Chrome with debugging
+		fmt.Println()
+		fmt.Println(subtleStyle.Render("  Step 4/5: Launching Chrome with remote debugging..."))
+
+		if isPortOpen(9222) {
+			fmt.Println(styledPass("Chrome is already running on port 9222"))
+		} else {
+			chromeCmd, err := launchChrome(chromePath)
+			if err != nil {
+				fmt.Println(styledFail("Failed to launch Chrome"))
+				return err
+			}
+			_ = chromeCmd // Process continues in background
+
+			// Wait for port to be ready
+			ready := false
+			for i := 0; i < 20; i++ {
+				time.Sleep(500 * time.Millisecond)
+				if isPortOpen(9222) {
+					ready = true
+					break
+				}
+			}
+			if !ready {
+				fmt.Println(styledWarn("Chrome started but port 9222 not yet ready"))
+				fmt.Println(subtleStyle.Render("     It may take a moment. Check chrome://version in the browser."))
+			} else {
+				fmt.Println(styledPass("Chrome is running with remote debugging on port 9222"))
+			}
+		}
+
+		// Step 5: Prompt user to authenticate
+		fmt.Println()
+		fmt.Println(subtleStyle.Render("  Step 5/5: Google authentication"))
+		fmt.Println()
+		fmt.Println(boxStyle.Render(
+			"  In the Chrome window that opened:\n" +
+				"  1. Go to docs.google.com\n" +
+				"  2. Sign in with your Google account\n" +
+				"  3. Verify you can see your documents\n\n" +
+				"  Press Enter when done..."))
+		fmt.Println()
+
+		reader := bufio.NewReader(os.Stdin)
+		reader.ReadString('\n')
+
+		// Verify CDP is accessible
+		if isPortOpen(9222) {
+			fmt.Println(styledPass("Chrome debugging port is active"))
+		} else {
+			fmt.Println(styledWarn("Chrome debugging port not responding"))
+			fmt.Println(styledFix("Make sure Chrome is still running"))
+		}
+
+		fmt.Println()
+		fmt.Println(boxStyle.Render(
+			successStyle.Render("  ✅ Browser setup complete!") + "\n\n" +
+				"  Chrome is running with debugging enabled.\n" +
+				"  Keep this Chrome window open for task assignment.\n\n" +
+				subtleStyle.Render("  Test with: gcal-organizer run --dry-run")))
+		return nil
+	},
+}
+
+// --- Additional helper functions ---
+
+// findBrowserDir locates the browser/ directory relative to the executable or cwd.
+func findBrowserDir() string {
+	execPath, err := os.Executable()
+	if err == nil {
+		dir := filepath.Join(filepath.Dir(execPath), "..", "browser")
+		if _, err := os.Stat(dir); err == nil {
+			return dir
+		}
+	}
+	cwd, _ := os.Getwd()
+	dir := filepath.Join(cwd, "browser")
+	if _, err := os.Stat(dir); err == nil {
+		return dir
+	}
+	return ""
+}
+
+// isPortOpen checks if a TCP port is listening on localhost.
+func isPortOpen(port int) bool {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// discoverChromeProfiles finds all Chrome profiles on the system.
+func discoverChromeProfiles() []string {
+	home, _ := os.UserHomeDir()
+	var baseDir string
+
+	switch runtime.GOOS {
+	case "darwin":
+		baseDir = filepath.Join(home, "Library", "Application Support", "Google", "Chrome")
+	case "linux":
+		baseDir = filepath.Join(home, ".config", "google-chrome")
+	default:
+		return nil
+	}
+
+	var profiles []string
+	// Check Default plus Profile 1-10
+	candidates := []string{"Default"}
+	for i := 1; i <= 10; i++ {
+		candidates = append(candidates, fmt.Sprintf("Profile %d", i))
+	}
+	for _, p := range candidates {
+		path := filepath.Join(baseDir, p)
+		if _, err := os.Stat(path); err == nil {
+			profiles = append(profiles, path)
+		}
+	}
+	return profiles
+}
+
+// launchChrome starts Chrome with remote debugging on port 9222.
+func launchChrome(profilePath string) (*exec.Cmd, error) {
+	var chromeBin string
+
+	switch runtime.GOOS {
+	case "darwin":
+		chromeBin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+	case "linux":
+		// Try common Linux Chrome paths
+		for _, bin := range []string{"google-chrome", "google-chrome-stable", "chromium-browser"} {
+			if p, err := exec.LookPath(bin); err == nil {
+				chromeBin = p
+				break
+			}
+		}
+	}
+
+	if chromeBin == "" {
+		return nil, fmt.Errorf("Chrome not found. Install Google Chrome and try again")
+	}
+
+	// Get the user data dir (parent of profile dir)
+	userDataDir := filepath.Dir(profilePath)
+	profileName := filepath.Base(profilePath)
+
+	cmd := exec.Command(chromeBin,
+		fmt.Sprintf("--remote-debugging-port=%d", 9222),
+		fmt.Sprintf("--user-data-dir=%s", userDataDir),
+		fmt.Sprintf("--profile-directory=%s", profileName),
+		"https://docs.google.com",
+	)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to launch Chrome: %w", err)
+	}
+
+	return cmd, nil
 }

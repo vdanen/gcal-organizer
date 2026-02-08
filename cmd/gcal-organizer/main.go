@@ -787,6 +787,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(uninstallCmd)
+	rootCmd.AddCommand(setupBrowserCmd)
 
 	configCmd.AddCommand(configShowCmd)
 	authCmd.AddCommand(authLoginCmd)
