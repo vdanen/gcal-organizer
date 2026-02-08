@@ -15,17 +15,17 @@ import (
 
 // Stats tracks operation counts for summary reporting.
 type Stats struct {
-	DocumentsFound     int
-	DocumentsMoved     int
-	ShortcutsCreated   int
-	ShortcutsTrashed   int
-	EventsProcessed    int
-	EventsWithAttach   int
-	FoldersShared      int
-	AttachmentsShared  int
-	TasksAssigned      int
-	TasksFailed        int
-	Errors             int
+	DocumentsFound    int
+	DocumentsMoved    int
+	ShortcutsCreated  int
+	ShortcutsTrashed  int
+	EventsProcessed   int
+	EventsWithAttach  int
+	FoldersShared     int
+	AttachmentsShared int
+	TasksAssigned     int
+	TasksFailed       int
+	Errors            int
 }
 
 // Organizer orchestrates all the services.
@@ -165,7 +165,7 @@ func (o *Organizer) OrganizeDocuments(ctx context.Context) error {
 					o.logger.Debug("Could not check for shortcuts", "err", err)
 				} else if shortcutID != "" {
 					// Found a shortcut pointing to this file - trash it
-					trashResult := o.drive.TrashFile(ctx, shortcutID, 
+					trashResult := o.drive.TrashFile(ctx, shortcutID,
 						fmt.Sprintf("Trash redundant shortcut to %s (file being moved)", doc.Name))
 					if !trashResult.Skipped || trashResult.Reason == "dry-run" {
 						o.stats.ShortcutsTrashed++

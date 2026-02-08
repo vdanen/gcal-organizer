@@ -59,12 +59,12 @@ func initServices(ctx context.Context, cfg *config.Config) (*organizer.Organizer
 	// Initialize OAuth client
 	oauthClient, err := auth.NewOAuthClient(cfg.CredentialsFile, cfg.TokenFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OAuth client: %w\n\nTo set up OAuth:\n1. Download credentials from Google Cloud Console\n2. Save to: %s", err, cfg.CredentialsFile)
+		return nil, fmt.Errorf("failed to create OAuth client: %w\n\nTo set up OAuth:\n1. Download credentials from Google Cloud Console\n2. Save to: %s\n\nRun 'gcal-organizer doctor' for full diagnostics", err, cfg.CredentialsFile)
 	}
 
 	httpClient, err := oauthClient.GetClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate: %w\n\nRun 'gcal-organizer auth login' to authenticate", err)
+		return nil, fmt.Errorf("failed to authenticate: %w\n\nRun 'gcal-organizer auth login' to authenticate\nRun 'gcal-organizer doctor' for full diagnostics", err)
 	}
 
 	// Initialize Drive service
@@ -93,7 +93,7 @@ var runCmd = &cobra.Command{
 
 		cfg, err := config.Load()
 		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+			return fmt.Errorf("failed to load config: %w\n\nRun 'gcal-organizer doctor' for diagnostics", err)
 		}
 		cfg.DryRun = dryRun
 		cfg.Verbose = verbose
@@ -261,12 +261,12 @@ func runAssignTasksDryRun(ctx context.Context, cfg *config.Config, docID string)
 	// Initialize OAuth client to access the document
 	oauthClient, err := auth.NewOAuthClient(cfg.CredentialsFile, cfg.TokenFile)
 	if err != nil {
-		return fmt.Errorf("failed to create OAuth client: %w", err)
+		return fmt.Errorf("failed to create OAuth client: %w\n\nRun 'gcal-organizer doctor' for diagnostics", err)
 	}
 
 	httpClient, err := oauthClient.GetClient(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate: %w\n\nRun 'gcal-organizer auth login' to authenticate", err)
+		return fmt.Errorf("failed to authenticate: %w\n\nRun 'gcal-organizer auth login' to authenticate\nRun 'gcal-organizer doctor' for full diagnostics", err)
 	}
 
 	// Initialize Docs service
@@ -278,7 +278,7 @@ func runAssignTasksDryRun(ctx context.Context, cfg *config.Config, docID string)
 	// Initialize Gemini client
 	geminiClient, err := gemini.NewClient(ctx, cfg.GeminiAPIKey, cfg.GeminiModel)
 	if err != nil {
-		return fmt.Errorf("failed to initialize Gemini client: %w\n\nSet GEMINI_API_KEY environment variable", err)
+		return fmt.Errorf("failed to initialize Gemini client: %w\n\nSet GEMINI_API_KEY environment variable\nRun 'gcal-organizer doctor' for full diagnostics", err)
 	}
 
 	// Get document content
@@ -333,12 +333,12 @@ func runAssignTasksBrowser(ctx context.Context, cfg *config.Config, docID string
 	// First, get assignments like dry-run mode
 	oauthClient, err := auth.NewOAuthClient(cfg.CredentialsFile, cfg.TokenFile)
 	if err != nil {
-		return fmt.Errorf("failed to create OAuth client: %w", err)
+		return fmt.Errorf("failed to create OAuth client: %w\n\nRun 'gcal-organizer doctor' for diagnostics", err)
 	}
 
 	httpClient, err := oauthClient.GetClient(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate: %w\n\nRun 'gcal-organizer auth login' to authenticate", err)
+		return fmt.Errorf("failed to authenticate: %w\n\nRun 'gcal-organizer auth login' to authenticate\nRun 'gcal-organizer doctor' for full diagnostics", err)
 	}
 
 	docsSvc, err := docs.NewService(ctx, httpClient)
@@ -348,7 +348,7 @@ func runAssignTasksBrowser(ctx context.Context, cfg *config.Config, docID string
 
 	geminiClient, err := gemini.NewClient(ctx, cfg.GeminiAPIKey, cfg.GeminiModel)
 	if err != nil {
-		return fmt.Errorf("failed to initialize Gemini client: %w\n\nSet GEMINI_API_KEY environment variable", err)
+		return fmt.Errorf("failed to initialize Gemini client: %w\n\nSet GEMINI_API_KEY environment variable\nRun 'gcal-organizer doctor' for full diagnostics", err)
 	}
 
 	// Get checkboxes
@@ -437,7 +437,7 @@ func runAssignTasksBrowser(ctx context.Context, cfg *config.Config, docID string
 	}
 
 	if _, err := os.Stat(browserDir); os.IsNotExist(err) {
-		return fmt.Errorf("browser directory not found. Please run from project root or install browser automation")
+		return fmt.Errorf("browser directory not found\n\nRun 'gcal-organizer setup-browser' to configure browser automation\nRun 'gcal-organizer doctor' for full diagnostics")
 	}
 
 	// Get Chrome profile path from config or use default
@@ -466,7 +466,7 @@ func runAssignTasksBrowser(ctx context.Context, cfg *config.Config, docID string
 	}
 
 	if err != nil {
-		return fmt.Errorf("browser automation failed: %s", stderr.String())
+		return fmt.Errorf("browser automation failed: %s\n\nRun 'gcal-organizer setup-browser' to verify browser setup\nRun 'gcal-organizer doctor' for diagnostics", stderr.String())
 	}
 
 	output := stdout.Bytes()
@@ -674,7 +674,7 @@ var authLoginCmd = &cobra.Command{
 
 		oauthClient, err := auth.NewOAuthClient(cfg.CredentialsFile, cfg.TokenFile)
 		if err != nil {
-			return fmt.Errorf("failed to create OAuth client: %w\n\nTo set up OAuth:\n1. Go to https://console.cloud.google.com\n2. Create OAuth 2.0 credentials (Desktop app)\n3. Download and save to: %s", err, cfg.CredentialsFile)
+			return fmt.Errorf("failed to create OAuth client: %w\n\nTo set up OAuth:\n1. Go to https://console.cloud.google.com\n2. Create OAuth 2.0 credentials (Desktop app)\n3. Download and save to: %s\n\nRun 'gcal-organizer doctor' for full diagnostics", err, cfg.CredentialsFile)
 		}
 
 		_, err = oauthClient.GetClient(ctx)

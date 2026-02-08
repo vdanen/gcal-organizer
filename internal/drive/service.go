@@ -162,7 +162,7 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 				}
 				logging.Logger.Debug("Fallback candidate", "name", file.Name, "parent", parentInfo)
 			}
-			
+
 			doc, err := s.parseDocument(file)
 			if err != nil {
 				continue // Skip documents that don't match the pattern

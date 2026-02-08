@@ -1,4 +1,4 @@
-.PHONY: build test run clean install lint fmt vet install-service uninstall-service service-status service-logs service-trigger
+.PHONY: build test run clean install lint fmt vet install-service uninstall-service service-status service-logs service-trigger ci install-hooks
 
 # Binary name
 BINARY_NAME=gcal-organizer
@@ -74,6 +74,28 @@ lint:
 
 # Check all (format, vet, test)
 check: fmt vet test
+
+# CI check (mirrors GitHub Actions exactly — check-only, fails on violations)
+ci:
+	@echo "🔍 Running CI checks..."
+	@echo "  Checking go.mod/go.sum..."
+	@$(GOCMD) mod tidy
+	@git diff --exit-code go.mod go.sum || (echo "❌ go.mod/go.sum not tidy" && exit 1)
+	@echo "  Checking gofmt..."
+	@unformatted=$$($(GOFMT) -l .); if [ -n "$$unformatted" ]; then echo "❌ Unformatted: $$unformatted"; exit 1; fi
+	@echo "  Running go vet..."
+	@$(GOVET) ./...
+	@echo "  Building..."
+	@$(GOBUILD) -o /dev/null $(BINARY_PATH)
+	@echo "  Running tests..."
+	@$(GOTEST) -race ./...
+	@echo "✅ All CI checks passed!"
+
+# Install git hooks
+install-hooks:
+	git config core.hooksPath .githooks
+	@echo "✅ Git hooks installed (using .githooks/)"
+
 
 # Development: build and run
 dev: build

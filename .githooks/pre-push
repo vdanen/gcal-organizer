@@ -1,0 +1,45 @@
+#!/bin/bash
+# Pre-push hook: runs the same checks as GitHub Actions CI.
+# Install with: make install-hooks
+
+set -e
+
+echo "🔍 Running pre-push CI checks..."
+
+# Use goenv Go if available, otherwise system Go
+if [ -x "$HOME/.goenv/versions/1.24.6/bin/go" ]; then
+    export GOROOT="$HOME/.goenv/versions/1.24.6"
+    export PATH="$HOME/.goenv/versions/1.24.6/bin:$PATH"
+fi
+
+# 1. Check go mod tidy
+echo "  Checking go.mod/go.sum..."
+go mod tidy
+if ! git diff --exit-code go.mod go.sum >/dev/null 2>&1; then
+    echo "❌ go.mod or go.sum not tidy. Run 'go mod tidy' and commit."
+    exit 1
+fi
+
+# 2. Check formatting
+echo "  Checking gofmt..."
+unformatted=$(gofmt -l .)
+if [ -n "$unformatted" ]; then
+    echo "❌ Unformatted files:"
+    echo "$unformatted"
+    echo "   Fix with: gofmt -w ."
+    exit 1
+fi
+
+# 3. Vet
+echo "  Running go vet..."
+go vet ./...
+
+# 4. Build
+echo "  Building..."
+go build ./cmd/gcal-organizer
+
+# 5. Test
+echo "  Running tests..."
+go test -race ./...
+
+echo "✅ All pre-push checks passed!"

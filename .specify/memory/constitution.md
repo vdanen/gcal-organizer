@@ -44,6 +44,12 @@ Built-in logging and debugging capabilities.
 - Progress indicators for long-running operations
 - Clear output of what actions were taken
 
+### VII. Self-Serve Diagnostics
+Error messages guide users to self-service tools.
+- User-facing error messages MUST include `Run 'gcal-organizer doctor' for diagnostics`
+- Setup-related errors SHOULD also reference the relevant self-service command (e.g., `init`, `setup-browser`, `auth login`)
+- The `doctor` command MUST be kept comprehensive enough to diagnose all common setup issues
+
 ## Technical Constraints
 
 ### API Limitations
@@ -83,12 +89,16 @@ Required scopes:
 - `go build ./...` - must compile
 - `go test ./...` - must pass
 - `go vet ./...` - must have no warnings
-- `gofmt` - code must be formatted
+- `gofmt` - code must be formatted (check-only, not auto-fix)
+- `go mod tidy` - go.mod/go.sum must be clean (no diff after tidy)
+- `make ci` MUST exist and mirror GitHub Actions CI checks exactly
+- Pre-push hooks SHOULD be installed via `make install-hooks` to catch failures before push
+- Local `make ci` and GitHub Actions CI MUST run identical checks — any divergence is a bug
 
 ## Documentation Requirements
 
 ### Documentation Maintenance
-- **README.md** MUST be kept up to date with all user-facing changes
+- **README.md**, **SETUP.md**, **man/gcal-organizer.1** MUST be kept up to date with all user-facing changes
 - Any change to CLI flags, commands, or configuration options MUST be reflected in README.md
 - New features MUST include documentation before being considered complete
 - Breaking changes MUST be clearly documented with migration instructions
@@ -111,4 +121,4 @@ This constitution guides all development decisions for the GCal Organizer CLI.
 - Trade-offs against principles must be explicitly noted
 - Simplicity preferred over feature creep (YAGNI)
 
-**Version**: 1.1.0 | **Ratified**: 2026-02-01 | **Last Amended**: 2026-02-06
+**Version**: 1.2.0 | **Ratified**: 2026-02-01 | **Last Amended**: 2026-02-08

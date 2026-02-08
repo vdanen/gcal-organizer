@@ -104,6 +104,7 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 - **FR-011**: `gcal-organizer init` MUST be idempotent — skip existing files, fill in missing ones
 - **FR-012**: Self-service commands SHOULD use `charmbracelet/huh` for interactive prompts (API key, Chrome profile selection)
 - **FR-013**: Self-service commands SHOULD use `charmbracelet/lipgloss` for styled terminal output
+- **FR-014**: User-facing error messages MUST include a reference to `gcal-organizer doctor` for diagnostics
 
 ### Non-Functional Requirements
 
