@@ -23,6 +23,7 @@ import (
 	"github.com/jflowers/gcal-organizer/internal/docs"
 	"github.com/jflowers/gcal-organizer/internal/drive"
 	"github.com/jflowers/gcal-organizer/internal/gemini"
+	"github.com/jflowers/gcal-organizer/internal/logging"
 	"github.com/jflowers/gcal-organizer/internal/organizer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -813,10 +814,11 @@ func initConfig() {
 
 	viper.AutomaticEnv()
 
+	// Wire --verbose to charm log level
+	logging.SetVerbose(verbose)
+
 	if err := viper.ReadInConfig(); err == nil {
-		if verbose {
-			fmt.Println("Using config file:", viper.ConfigFileUsed())
-		}
+		logging.Logger.Debug("Using config file", "path", viper.ConfigFileUsed())
 	}
 }
 

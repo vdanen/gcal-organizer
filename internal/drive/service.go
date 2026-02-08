@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jflowers/gcal-organizer/internal/logging"
 	"github.com/jflowers/gcal-organizer/pkg/models"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -129,8 +130,7 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 	query := keywordQuery + "mimeType = 'application/vnd.google-apps.document' and trashed = false"
 
 	if s.verbose {
-		fmt.Printf("      [DEBUG] Root folder ID: %s\n", s.rootFolderID)
-		fmt.Printf("      [DEBUG] Query: %s\n", query)
+		logging.Logger.Debug("Document query", "root_folder", s.rootFolderID, "query", query)
 	}
 
 	var docs []*models.Document
@@ -160,7 +160,7 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 				if len(file.Parents) > 0 {
 					parentInfo = file.Parents[0]
 				}
-				fmt.Printf("      [DEBUG] Fallback candidate: %s (parent: %s)\n", file.Name, parentInfo)
+				logging.Logger.Debug("Fallback candidate", "name", file.Name, "parent", parentInfo)
 			}
 			
 			doc, err := s.parseDocument(file)
@@ -177,8 +177,8 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 	}
 
 	if s.verbose {
-		fmt.Printf("      [DEBUG] Scanned %d documents, %d fallback candidates, %d matched\n", 
-			scannedCount, fallbackCandidates, len(docs))
+		logging.Logger.Debug("Document scan complete",
+			"scanned", scannedCount, "fallback_candidates", fallbackCandidates, "matched", len(docs))
 	}
 
 	return docs, nil

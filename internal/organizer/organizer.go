@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/jflowers/gcal-organizer/internal/calendar"
 	"github.com/jflowers/gcal-organizer/internal/config"
 	"github.com/jflowers/gcal-organizer/internal/drive"
+	"github.com/jflowers/gcal-organizer/internal/logging"
 )
 
 // Stats tracks operation counts for summary reporting.
@@ -31,8 +33,8 @@ type Organizer struct {
 	config   *config.Config
 	drive    *drive.Service
 	calendar *calendar.Service
+	logger   *log.Logger
 
-	verbose     bool
 	stats       Stats
 	notesDocIDs map[string]bool // Google Doc IDs with "Notes" attachments
 }
@@ -43,7 +45,7 @@ func New(cfg *config.Config, driveSvc *drive.Service, calSvc *calendar.Service) 
 		config:      cfg,
 		drive:       driveSvc,
 		calendar:    calSvc,
-		verbose:     cfg.Verbose,
+		logger:      logging.Logger,
 		notesDocIDs: make(map[string]bool),
 	}
 }
@@ -60,28 +62,21 @@ func (o *Organizer) GetNotesDocIDs() []string {
 // RunFullWorkflow executes all operations in sequence.
 func (o *Organizer) RunFullWorkflow(ctx context.Context) error {
 	if o.drive.IsDryRun() {
-		o.log("═══════════════════════════════════════════════════════════")
-		o.log("🔍 DRY RUN MODE - No changes will be made")
-		o.log("═══════════════════════════════════════════════════════════")
+		o.logger.Warn("DRY RUN MODE — no changes will be made")
 	}
-	o.log("🚀 Starting full workflow...")
-	o.log("")
+	o.logger.Info("Starting full workflow")
 
 	// Step 1: Organize documents
-	o.log("📁 STEP 1: Organizing Documents")
-	o.log("───────────────────────────────────────────────────────────")
+	o.logger.Info("STEP 1: Organizing Documents")
 	if err := o.OrganizeDocuments(ctx); err != nil {
 		return fmt.Errorf("organize documents failed: %w", err)
 	}
-	o.log("")
 
 	// Step 2: Sync calendar
-	o.log("📅 STEP 2: Syncing Calendar Attachments")
-	o.log("───────────────────────────────────────────────────────────")
+	o.logger.Info("STEP 2: Syncing Calendar Attachments")
 	if err := o.SyncCalendarAttachments(ctx); err != nil {
 		return fmt.Errorf("sync calendar failed: %w", err)
 	}
-	o.log("")
 
 	// Note: Step 3 (Assign Tasks) is handled by the caller if needed,
 	// since it requires browser automation that lives outside the organizer.
@@ -102,39 +97,37 @@ func (o *Organizer) AddTaskStats(assigned, failed int) {
 
 // printSummary outputs the final statistics.
 func (o *Organizer) printSummary() {
-	o.log("═══════════════════════════════════════════════════════════")
 	if o.drive.IsDryRun() {
-		o.log("📊 DRY RUN SUMMARY - What would happen:")
+		o.logger.Info("DRY RUN SUMMARY",
+			"docs_found", o.stats.DocumentsFound,
+			"docs_moved", o.stats.DocumentsMoved,
+			"shortcuts_created", o.stats.ShortcutsCreated,
+			"events_processed", o.stats.EventsProcessed,
+			"tasks_assigned", o.stats.TasksAssigned,
+		)
+		o.logger.Info("Dry run complete — no changes were made")
 	} else {
-		o.log("📊 WORKFLOW SUMMARY:")
-	}
-	o.log("───────────────────────────────────────────────────────────")
-	o.log(fmt.Sprintf("   📄 Documents found:        %d", o.stats.DocumentsFound))
-	o.log(fmt.Sprintf("   📂 Documents moved:        %d", o.stats.DocumentsMoved))
-	o.log(fmt.Sprintf("   🔗 Shortcuts created:      %d", o.stats.ShortcutsCreated))
-	if o.stats.ShortcutsTrashed > 0 {
-		o.log(fmt.Sprintf("   🗑️  Shortcuts trashed:      %d", o.stats.ShortcutsTrashed))
-	}
-	o.log(fmt.Sprintf("   📅 Events processed:       %d", o.stats.EventsProcessed))
-	o.log(fmt.Sprintf("   📎 Events with attachments: %d", o.stats.EventsWithAttach))
-	if o.stats.FoldersShared > 0 {
-		o.log(fmt.Sprintf("   👥 Folders shared:          %d", o.stats.FoldersShared))
-	}
-	if o.stats.AttachmentsShared > 0 {
-		o.log(fmt.Sprintf("   📎 Attachments shared:      %d", o.stats.AttachmentsShared))
-	}
-	o.log(fmt.Sprintf("   ✅ Tasks assigned:          %d", o.stats.TasksAssigned))
-	if o.stats.TasksFailed > 0 {
-		o.log(fmt.Sprintf("   ❌ Tasks failed:            %d", o.stats.TasksFailed))
-	}
-	if o.stats.Errors > 0 {
-		o.log(fmt.Sprintf("   ⚠️  Errors encountered:     %d", o.stats.Errors))
-	}
-	o.log("═══════════════════════════════════════════════════════════")
-	if o.drive.IsDryRun() {
-		o.log("✨ Dry run complete - no changes were made")
-	} else {
-		o.log("✅ Workflow complete!")
+		o.logger.Info("WORKFLOW SUMMARY",
+			"docs_found", o.stats.DocumentsFound,
+			"docs_moved", o.stats.DocumentsMoved,
+			"shortcuts_created", o.stats.ShortcutsCreated,
+			"events_processed", o.stats.EventsProcessed,
+			"events_with_attachments", o.stats.EventsWithAttach,
+			"tasks_assigned", o.stats.TasksAssigned,
+		)
+		if o.stats.ShortcutsTrashed > 0 {
+			o.logger.Info("Cleanup", "shortcuts_trashed", o.stats.ShortcutsTrashed)
+		}
+		if o.stats.FoldersShared > 0 {
+			o.logger.Info("Sharing", "folders_shared", o.stats.FoldersShared, "attachments_shared", o.stats.AttachmentsShared)
+		}
+		if o.stats.TasksFailed > 0 {
+			o.logger.Warn("Task failures", "failed", o.stats.TasksFailed)
+		}
+		if o.stats.Errors > 0 {
+			o.logger.Warn("Errors encountered", "count", o.stats.Errors)
+		}
+		o.logger.Info("Workflow complete")
 	}
 }
 
@@ -152,14 +145,13 @@ func (o *Organizer) OrganizeDocuments(ctx context.Context) error {
 	}
 
 	o.stats.DocumentsFound = len(documents)
-	o.log(fmt.Sprintf("   Found %d meeting documents", len(documents)))
-	o.log("")
+	o.logger.Info("Found meeting documents", "count", len(documents))
 
 	for _, doc := range documents {
 		// Get or create meeting folder
 		folder, err := o.drive.GetOrCreateMeetingFolder(ctx, doc.MeetingName)
 		if err != nil {
-			o.log(fmt.Sprintf("   ⚠️  Error: Failed to get/create folder for %s: %v", doc.MeetingName, err))
+			o.logger.Error("Failed to get/create folder", "meeting", doc.MeetingName, "err", err)
 			o.stats.Errors++
 			continue
 		}
@@ -170,14 +162,14 @@ func (o *Organizer) OrganizeDocuments(ctx context.Context) error {
 			if doc.IsFallback && folder.ID != "" {
 				shortcutID, err := o.drive.FindShortcutToFile(ctx, doc.ID, folder.ID)
 				if err != nil {
-					o.logVerbose(fmt.Sprintf("   ⚠️  Could not check for shortcuts: %v", err))
+					o.logger.Debug("Could not check for shortcuts", "err", err)
 				} else if shortcutID != "" {
 					// Found a shortcut pointing to this file - trash it
 					trashResult := o.drive.TrashFile(ctx, shortcutID, 
 						fmt.Sprintf("Trash redundant shortcut to %s (file being moved)", doc.Name))
 					if !trashResult.Skipped || trashResult.Reason == "dry-run" {
 						o.stats.ShortcutsTrashed++
-						o.log(fmt.Sprintf("   🗑️  %s", trashResult.Details))
+						o.logger.Info("Trashed redundant shortcut", "details", trashResult.Details)
 					}
 				}
 			}
@@ -200,8 +192,7 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 	}
 
 	o.stats.EventsProcessed = len(events)
-	o.log(fmt.Sprintf("   Found %d calendar events (last %d days)", len(events), o.config.DaysToLookBack))
-	o.log("")
+	o.logger.Info("Found calendar events", "count", len(events), "days", o.config.DaysToLookBack)
 
 	for _, event := range events {
 		if len(event.Attachments) == 0 {
@@ -213,7 +204,7 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 		// Get or create meeting folder
 		folder, err := o.drive.GetOrCreateMeetingFolder(ctx, event.Title)
 		if err != nil {
-			o.log(fmt.Sprintf("   ⚠️  Error: Failed to get/create folder for %s: %v", event.Title, err))
+			o.logger.Error("Failed to get/create folder", "event", event.Title, "err", err)
 			o.stats.Errors++
 			continue
 		}
@@ -254,10 +245,9 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 			result := o.drive.ShareFolder(ctx, folder.ID, folder.Name, attendee.Email)
 			if !result.Skipped || result.Reason == "dry-run" {
 				o.stats.FoldersShared++
-				o.log(fmt.Sprintf("   👥 %s", result.Details))
+				o.logger.Info("Shared folder", "folder", folder.Name, "email", attendee.Email)
 			} else if result.Reason != "already shared" {
-				// Log errors but not "already shared" skips
-				o.log(fmt.Sprintf("   ⚠️  %s", result.Details))
+				o.logger.Warn("Share folder failed", "details", result.Details)
 				o.stats.Errors++
 			}
 		}
@@ -270,7 +260,7 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 
 			// Only share if we have edit access to the attachment
 			if !o.drive.CanEditFile(ctx, att.FileID) {
-				o.logVerbose(fmt.Sprintf("   ⏭️  SKIP: No edit access to '%s'", att.Title))
+				o.logger.Debug("Skipping share — no edit access", "attachment", att.Title)
 				continue
 			}
 
@@ -282,9 +272,9 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 				result := o.drive.ShareFile(ctx, att.FileID, att.Title, attendee.Email, "writer")
 				if !result.Skipped || result.Reason == "dry-run" {
 					o.stats.AttachmentsShared++
-					o.log(fmt.Sprintf("   📎 %s", result.Details))
+					o.logger.Info("Shared attachment", "file", att.Title, "email", attendee.Email)
 				} else if result.Reason != "already shared" {
-					o.log(fmt.Sprintf("   ⚠️  %s", result.Details))
+					o.logger.Warn("Share attachment failed", "details", result.Details)
 					o.stats.Errors++
 				}
 			}
@@ -303,21 +293,25 @@ func isCalendarResource(email string) bool {
 
 // logActionResult logs the result of a document action.
 func (o *Organizer) logActionResult(result drive.ActionResult, isMove bool) {
+	action := "shortcut"
+	if isMove {
+		action = "move"
+	}
+
 	if result.Skipped {
 		if result.Reason == "already exists" || result.Reason == "already in folder" {
-			o.logVerbose(fmt.Sprintf("   ⏭️  SKIP: %s", result.Details))
+			o.logger.Debug("Skipped", "action", action, "details", result.Details)
 		} else if result.Reason != "" && result.Reason != "dry-run" {
 			o.stats.Errors++
-			o.log(fmt.Sprintf("   ⚠️  ERROR: %s\n      Reason: %s", result.Details, result.Reason))
+			o.logger.Error("Action failed", "action", action, "details", result.Details, "reason", result.Reason)
 		} else {
 			// dry-run, still log what would happen
 			if isMove {
 				o.stats.DocumentsMoved++
-				o.log(fmt.Sprintf("   📄 %s", result.Details))
 			} else {
 				o.stats.ShortcutsCreated++
-				o.log(fmt.Sprintf("   🔗 %s", result.Details))
 			}
+			o.logger.Info("Would "+action, "details", result.Details)
 		}
 	} else {
 		if isMove {
@@ -325,40 +319,27 @@ func (o *Organizer) logActionResult(result drive.ActionResult, isMove bool) {
 		} else {
 			o.stats.ShortcutsCreated++
 		}
-		o.logVerbose(fmt.Sprintf("   ✓ %s", result.Details))
+		o.logger.Debug("Completed", "action", action, "details", result.Details)
 	}
 }
 
 // logCalendarAction logs the result of a calendar sync action.
 func (o *Organizer) logCalendarAction(result drive.ActionResult, eventTitle, eventDate, attachmentName string) {
-	eventContext := fmt.Sprintf("%s (%s)", eventTitle, eventDate)
+	event := fmt.Sprintf("%s (%s)", eventTitle, eventDate)
 
 	if result.Skipped {
 		if result.Reason == "already exists" {
-			o.logVerbose(fmt.Sprintf("   ⏭️  SKIP [%s]: %s", eventContext, result.Details))
+			o.logger.Debug("Skipped attachment", "event", event, "attachment", attachmentName)
 		} else if result.Reason != "" && result.Reason != "dry-run" {
 			o.stats.Errors++
-			o.log(fmt.Sprintf("   ⚠️  ERROR [%s]: %s\n      Reason: %s", eventContext, result.Details, result.Reason))
+			o.logger.Error("Attachment sync failed", "event", event, "attachment", attachmentName, "reason", result.Reason)
 		} else {
 			// dry-run
 			o.stats.ShortcutsCreated++
-			o.log(fmt.Sprintf("   📅 EVENT: %s", eventContext))
-			o.log(fmt.Sprintf("      Attachment: %s", attachmentName))
-			o.log(fmt.Sprintf("      %s", result.Details))
-			o.log("")
+			o.logger.Info("Would link attachment", "event", event, "attachment", attachmentName)
 		}
 	} else {
 		o.stats.ShortcutsCreated++
-		o.logVerbose(fmt.Sprintf("   ✓ [%s] %s", eventContext, result.Details))
-	}
-}
-
-func (o *Organizer) log(msg string) {
-	fmt.Println(msg)
-}
-
-func (o *Organizer) logVerbose(msg string) {
-	if o.verbose {
-		fmt.Println(msg)
+		o.logger.Debug("Linked attachment", "event", event, "attachment", attachmentName)
 	}
 }
