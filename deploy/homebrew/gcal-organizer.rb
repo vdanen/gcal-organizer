@@ -30,8 +30,7 @@ class GcalOrganizer < Formula
   end
 
   def post_install
-    # Create config directory
-    (var/"gcal-organizer").mkpath
+    # Config directory is created by 'gcal-organizer init'
   end
 
   service do
@@ -50,21 +49,21 @@ class GcalOrganizer < Formula
     <<~EOS
       To get started:
 
-        1. Set up Google Cloud credentials:
-           See: https://github.com/jflowers/gcal-organizer/blob/main/docs/SETUP.md
+        1. Run the setup wizard:
+           gcal-organizer init
 
-        2. Create your env file:
-           mkdir -p ~/.gcal-organizer
-           cp #{etc}/gcal-organizer/.env.example ~/.gcal-organizer/.env
-           # Edit ~/.gcal-organizer/.env with your API keys
+        2. Download Google Cloud credentials (see output from init)
 
         3. Authenticate:
            gcal-organizer auth login
 
-        4. Test with dry-run:
-           gcal-organizer run --dry-run --verbose
+        4. Check everything is configured:
+           gcal-organizer doctor
 
-        5. Start the hourly service:
+        5. Test with dry-run:
+           gcal-organizer run --dry-run
+
+        6. Start the hourly service:
            brew services start gcal-organizer
 
       Man page: man gcal-organizer

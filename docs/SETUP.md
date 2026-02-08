@@ -70,7 +70,8 @@ Navigate to **APIs & Services** → **Library** and enable:
 6. Save it as `~/.gcal-organizer/credentials.json`:
 
 ```bash
-mkdir -p ~/.gcal-organizer
+# If you haven't run init yet, it will create the directory for you:
+gcal-organizer init
 mv ~/Downloads/client_secret_*.json ~/.gcal-organizer/credentials.json
 ```
 
@@ -91,34 +92,19 @@ mv ~/Downloads/client_secret_*.json ~/.gcal-organizer/credentials.json
 
 ## Step 5: Configure the Application
 
-Create a configuration file at `~/.gcal-organizer/config.yaml`:
+The easiest way to configure is with the setup wizard:
 
-```yaml
-# Required: Your Gemini API key
-gemini_api_key: "YOUR_GEMINI_API_KEY_HERE"
-
-# Master folder name in Google Drive (will be created if it doesn't exist)
-master_folder_name: "Meeting Notes"
-
-# Keywords to identify meeting documents (regex patterns)
-filename_keywords:
-  - "Notes"
-  - "Meeting"
-  - "Standup"
-  - "1-1"
-  - "Weekly"
-
-# Days to look back for calendar events
-calendar_lookback_days: 8
-
-# Task list name in Google Tasks
-task_list_name: "Meeting Action Items"
-
-# Optional: Enable verbose output
-verbose: false
+```bash
+gcal-organizer init
 ```
 
-Alternatively, use environment variables (see `.env.example`):
+This will:
+- Create `~/.gcal-organizer/` if needed
+- Generate a `.env` file with your settings
+- Prompt for your `GEMINI_API_KEY`
+- Auto-detect your Chrome profile path
+
+Alternatively, use environment variables directly (see `.env.example`):
 
 ```bash
 export GEMINI_API_KEY="your-key-here"
@@ -138,8 +124,14 @@ make install
 # Install browser automation dependencies (for assign-tasks)
 cd browser && npm install && cd ..
 
-# First run - this will open a browser for OAuth
+# Run init if you haven't yet
+gcal-organizer init
+
+# Authenticate with Google
 gcal-organizer auth login
+
+# Verify everything
+gcal-organizer doctor
 ```
 
 The OAuth flow will:
