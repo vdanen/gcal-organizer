@@ -33,17 +33,7 @@ class GcalOrganizer < Formula
     # Config directory is created by 'gcal-organizer init'
   end
 
-  service do
-    run [opt_libexec/"deploy/run-wrapper.sh"]
-    run_type :interval
-    interval 3600
-    log_path var/"log/gcal-organizer.log"
-    error_log_path var/"log/gcal-organizer.log"
-    environment_variables PATH: std_service_path_env,
-                          GCAL_DAYS_TO_LOOK_BACK: "1",
-                          GCAL_ORGANIZER_BIN: "#{HOMEBREW_PREFIX}/bin/gcal-organizer",
-                          HOME: Dir.home
-  end
+
 
   def caveats
     <<~EOS
@@ -63,8 +53,12 @@ class GcalOrganizer < Formula
         5. Test with dry-run:
            gcal-organizer run --dry-run
 
-        6. Start the hourly service:
-           brew services start gcal-organizer
+        6. Install the hourly service:
+           gcal-organizer install
+
+      Manage the service with:
+        gcal-organizer doctor     # check service status
+        gcal-organizer uninstall  # remove the service
 
       Man page: man gcal-organizer
     EOS
