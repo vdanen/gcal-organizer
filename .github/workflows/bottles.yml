@@ -1,14 +1,23 @@
 name: Build Bottles
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g., v1.2.0)"
+        required: true
 
 permissions:
   contents: write
 
 jobs:
   bottle:
+    # Only run if the Release workflow succeeded
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
     strategy:
       matrix:
         include:
@@ -26,6 +35,14 @@ jobs:
     name: Bottle (${{ matrix.tag }})
 
     steps:
+      - name: Get release tag
+        id: tag
+        run: |
+          # Support both workflow_run (automatic) and workflow_dispatch (manual)
+          TAG="${{ github.event.workflow_run.head_branch || github.event.inputs.tag }}"
+          echo "Release tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@master
 
@@ -41,6 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          TAG="${{ steps.tag.outputs.tag }}"
           # Find the generated bottle tarball
           BOTTLE_FILE=$(ls gcal-organizer--*.tar.gz 2>/dev/null | head -1)
           if [ -z "$BOTTLE_FILE" ]; then
@@ -49,8 +67,8 @@ jobs:
             exit 1
           fi
 
-          echo "Uploading bottle: $BOTTLE_FILE"
-          gh release upload "${{ github.event.release.tag_name }}" "$BOTTLE_FILE" \
+          echo "Uploading bottle: $BOTTLE_FILE to release $TAG"
+          gh release upload "$TAG" "$BOTTLE_FILE" \
             --repo "${{ github.repository }}" \
             --clobber
 
@@ -66,6 +84,12 @@ jobs:
     name: Update formula with bottles
 
     steps:
+      - name: Get release tag
+        id: tag
+        run: |
+          TAG="${{ github.event.workflow_run.head_branch || github.event.inputs.tag }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Download all bottle JSONs
         uses: actions/download-artifact@v4
         with:
@@ -75,18 +99,19 @@ jobs:
       - name: Generate bottle block
         id: bottles
         run: |
+          TAG="${{ steps.tag.outputs.tag }}"
           echo "Generating bottle block from JSON files..."
           ls -la *.json 2>/dev/null || echo "No JSON files found"
 
           # Parse bottle JSON files and build the bottle block
           BOTTLE_BLOCK="  bottle do"
-          ROOT_URL="    root_url \"https://github.com/jflowers/gcal-organizer/releases/download/${{ github.event.release.tag_name }}\""
+          ROOT_URL="    root_url \"https://github.com/jflowers/gcal-organizer/releases/download/${TAG}\""
           BOTTLE_BLOCK="${BOTTLE_BLOCK}\n${ROOT_URL}"
 
           for json_file in *.json; do
             echo "Processing: $json_file"
             # Extract tag and sha from the bottle JSON
-            TAG=$(cat "$json_file" | python3 -c "
+            BTAG=$(cat "$json_file" | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
           formula = list(data.keys())[0]
@@ -100,8 +125,8 @@ jobs:
           tags = list(data[formula]['bottle']['tags'].keys())
           print(data[formula]['bottle']['tags'][tags[0]]['sha256'])
           ")
-            echo "  Tag: $TAG, SHA: $SHA"
-            BOTTLE_BLOCK="${BOTTLE_BLOCK}\n    sha256 cellar: :any_skip_relocation, ${TAG}: \"${SHA}\""
+            echo "  Tag: $BTAG, SHA: $SHA"
+            BOTTLE_BLOCK="${BOTTLE_BLOCK}\n    sha256 cellar: :any_skip_relocation, ${BTAG}: \"${SHA}\""
           done
 
           BOTTLE_BLOCK="${BOTTLE_BLOCK}\n  end"
@@ -116,6 +141,7 @@ jobs:
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
+          TAG="${{ steps.tag.outputs.tag }}"
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/jflowers/homebrew-gcal-organizer.git" /tmp/tap
           cd /tmp/tap
 
@@ -136,5 +162,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$FORMULA"
-          git commit -m "Add bottles for ${{ github.event.release.tag_name }}" || echo "No changes"
+          git commit -m "Add bottles for ${TAG}" || echo "No changes"
           git push
