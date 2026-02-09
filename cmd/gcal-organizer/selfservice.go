@@ -386,23 +386,30 @@ var uninstallCmd = &cobra.Command{
 // detectChromeProfile finds the default Chrome profile for the current OS.
 func detectChromeProfile() string {
 	home, _ := os.UserHomeDir()
-	var baseDir string
+	var baseDirs []string
 
 	switch runtime.GOOS {
 	case "darwin":
-		baseDir = filepath.Join(home, "Library", "Application Support", "Google", "Chrome")
+		baseDirs = []string{
+			filepath.Join(home, "Library", "Application Support", "Google", "Chrome"),
+		}
 	case "linux":
-		baseDir = filepath.Join(home, ".config", "google-chrome")
+		baseDirs = []string{
+			filepath.Join(home, ".config", "google-chrome"),                                    // Standard
+			filepath.Join(home, ".var", "app", "com.google.Chrome", "config", "google-chrome"), // Flatpak
+		}
 	default:
 		return ""
 	}
 
-	// Try common profile names in order
+	// Try common profile names in each base directory
 	profiles := []string{"Default", "Profile 1", "Profile 2", "Profile 3"}
-	for _, p := range profiles {
-		path := filepath.Join(baseDir, p)
-		if _, err := os.Stat(path); err == nil {
-			return path
+	for _, baseDir := range baseDirs {
+		for _, p := range profiles {
+			path := filepath.Join(baseDir, p)
+			if _, err := os.Stat(path); err == nil {
+				return path
+			}
 		}
 	}
 	return ""

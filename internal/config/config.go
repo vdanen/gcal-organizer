@@ -54,6 +54,11 @@ func DefaultConfig() *Config {
 	chromePath := home + "/Library/Application Support/Google/Chrome/Profile 1"
 	if runtime.GOOS == "linux" {
 		chromePath = home + "/.config/google-chrome/Default"
+		// Also check Flatpak Chrome (common on Fedora)
+		flatpakPath := home + "/.var/app/com.google.Chrome/config/google-chrome/Default"
+		if _, err := os.Stat(flatpakPath); err == nil {
+			chromePath = flatpakPath
+		}
 	}
 
 	return &Config{
