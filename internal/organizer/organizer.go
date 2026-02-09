@@ -21,7 +21,6 @@ type Stats struct {
 	ShortcutsTrashed  int
 	EventsProcessed   int
 	EventsWithAttach  int
-	FoldersShared     int
 	AttachmentsShared int
 	TasksAssigned     int
 	TasksFailed       int
@@ -118,8 +117,8 @@ func (o *Organizer) printSummary() {
 		if o.stats.ShortcutsTrashed > 0 {
 			o.logger.Info("Cleanup", "shortcuts_trashed", o.stats.ShortcutsTrashed)
 		}
-		if o.stats.FoldersShared > 0 {
-			o.logger.Info("Sharing", "folders_shared", o.stats.FoldersShared, "attachments_shared", o.stats.AttachmentsShared)
+		if o.stats.AttachmentsShared > 0 {
+			o.logger.Info("Sharing", "attachments_shared", o.stats.AttachmentsShared)
 		}
 		if o.stats.TasksFailed > 0 {
 			o.logger.Warn("Task failures", "failed", o.stats.TasksFailed)
@@ -232,23 +231,6 @@ func (o *Organizer) SyncCalendarAttachments(ctx context.Context) error {
 			if att.MimeType == "application/vnd.google-apps.document" &&
 				strings.Contains(strings.ToLower(title), "notes") {
 				o.notesDocIDs[att.FileID] = true
-			}
-		}
-
-		// Share folder with attendees
-		for _, attendee := range event.Attendees {
-			// Skip self, empty emails, and calendar resources
-			if attendee.IsSelf || attendee.Email == "" || isCalendarResource(attendee.Email) {
-				continue
-			}
-
-			result := o.drive.ShareFolder(ctx, folder.ID, folder.Name, attendee.Email)
-			if !result.Skipped || result.Reason == "dry-run" {
-				o.stats.FoldersShared++
-				o.logger.Info("Shared folder", "folder", folder.Name, "email", attendee.Email)
-			} else if result.Reason != "already shared" {
-				o.logger.Warn("Share folder failed", "details", result.Details)
-				o.stats.Errors++
 			}
 		}
 

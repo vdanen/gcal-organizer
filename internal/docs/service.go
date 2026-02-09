@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/jflowers/gcal-organizer/pkg/models"
@@ -15,6 +16,13 @@ import (
 
 // ProcessedEmoji is the emoji used to mark processed action items.
 const ProcessedEmoji = "🆔"
+
+// ClaimEmoji is the emoji used to mark items being actively assigned.
+// Includes a timestamp for stale claim detection.
+const ClaimEmoji = "⏳"
+
+// ClaimTTL is how long a claim is valid before it's considered stale.
+const ClaimTTL = 10 * time.Minute
 
 // AssigneeEmoji is the emoji used before the assignee name.
 const AssigneeEmoji = "👤"
@@ -43,6 +51,9 @@ type CheckboxItem struct {
 
 	// IsProcessed indicates if the item has already been processed (contains 🆔)
 	IsProcessed bool
+
+	// IsClaimed indicates if another instance has claimed this item (contains ⏳)
+	IsClaimed bool
 }
 
 // NewService creates a new Docs service.
@@ -138,8 +149,9 @@ func (s *Service) extractItemsFromSection(content []*docs.StructuralElement) ([]
 			continue
 		}
 
-		// Check if already processed
+		// Check if already processed or claimed
 		isProcessed := strings.Contains(content, ProcessedEmoji)
+		isClaimed := isClaimActive(content)
 
 		items = append(items, &CheckboxItem{
 			Text:        content,
@@ -147,6 +159,7 @@ func (s *Service) extractItemsFromSection(content []*docs.StructuralElement) ([]
 			EndIndex:    elem.EndIndex,
 			IsChecked:   false,
 			IsProcessed: isProcessed,
+			IsClaimed:   isClaimed,
 		})
 	}
 
@@ -176,6 +189,7 @@ func extractParagraphText(para *docs.Paragraph) string {
 }
 
 // AnnotateActionItem adds the processed marker to an action item in the document.
+// If a claim marker exists, it is replaced with the final annotation.
 func (s *Service) AnnotateActionItem(ctx context.Context, docID string, item *models.ActionItem) error {
 	annotation := fmt.Sprintf(" %s %s %s %s %s",
 		AssigneeEmoji, item.Assignee,
@@ -202,4 +216,62 @@ func (s *Service) AnnotateActionItem(ctx context.Context, docID string, item *mo
 	}
 
 	return nil
+}
+
+// ClaimActionItem writes a ⏳ claim marker to a checkbox item, signaling to
+// other instances that this item is being actively assigned. The marker includes
+// a timestamp for stale claim detection.
+func (s *Service) ClaimActionItem(ctx context.Context, docID string, endIndex int64) error {
+	claim := fmt.Sprintf(" %s%s", ClaimEmoji, time.Now().UTC().Format(time.RFC3339))
+
+	req := &docs.BatchUpdateDocumentRequest{
+		Requests: []*docs.Request{
+			{
+				InsertText: &docs.InsertTextRequest{
+					Location: &docs.Location{
+						Index: endIndex - 1, // Insert before the newline
+					},
+					Text: claim,
+				},
+			},
+		},
+	}
+
+	_, err := s.client.Documents.BatchUpdate(docID, req).Do()
+	if err != nil {
+		return fmt.Errorf("failed to claim action item: %w", err)
+	}
+
+	return nil
+}
+
+// isClaimActive checks if a line contains an active (non-expired) ⏳ claim.
+func isClaimActive(text string) bool {
+	idx := strings.Index(text, ClaimEmoji)
+	if idx < 0 {
+		return false
+	}
+
+	// Extract the timestamp after ⏳
+	after := text[idx+len(ClaimEmoji):]
+	// Trim any trailing whitespace or characters
+	after = strings.TrimSpace(after)
+	if after == "" {
+		// Claim with no timestamp — treat as active (conservative)
+		return true
+	}
+
+	// Try to parse RFC3339 timestamp
+	// Take first 20 chars max (length of 2026-02-09T12:38:10Z)
+	if len(after) > 25 {
+		after = after[:25]
+	}
+	claimTime, err := time.Parse(time.RFC3339, after)
+	if err != nil {
+		// Can't parse timestamp — treat as active (conservative)
+		return true
+	}
+
+	// Check if claim has expired
+	return time.Since(claimTime) < ClaimTTL
 }

@@ -534,12 +534,6 @@ func (s *Service) TrashFile(ctx context.Context, fileID, description string) Act
 	}
 }
 
-// ShareFolder shares a folder with the specified email address (writer access).
-// Returns ActionResult describing what happened.
-func (s *Service) ShareFolder(ctx context.Context, folderID, folderName, email string) ActionResult {
-	return s.ShareFile(ctx, folderID, folderName, email, "writer")
-}
-
 // ShareFile shares a file or folder with the specified email address and role.
 // Role should be "reader", "writer", or "commenter".
 // Returns ActionResult describing what happened.
