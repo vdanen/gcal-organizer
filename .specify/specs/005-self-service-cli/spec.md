@@ -93,7 +93,7 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 
 - **FR-001**: `gcal-organizer init` MUST create `~/.gcal-organizer/` and generate a `.env` file
 - **FR-002**: `gcal-organizer init` MUST prompt for GEMINI_API_KEY interactively (or accept `--api-key` flag)
-- **FR-003**: `gcal-organizer init` MUST auto-detect Chrome profile path for the current OS
+- **FR-003**: `gcal-organizer init` MUST set `CHROME_PROFILE_PATH` to a dedicated `gcal-organizer` Chrome profile directory for the current OS
 - **FR-004**: `gcal-organizer init` MUST support `--non-interactive` flag for scripted use
 - **FR-005**: `gcal-organizer doctor` MUST check: config dir, credentials, token validity, API key, Node.js, Chrome profile, service status
 - **FR-006**: `gcal-organizer doctor` MUST output actionable fix commands for each issue
@@ -105,7 +105,7 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 - **FR-012**: Self-service commands SHOULD use `charmbracelet/huh` for interactive prompts (API key, Chrome profile selection)
 - **FR-013**: Self-service commands SHOULD use `charmbracelet/lipgloss` for styled terminal output
 - **FR-014**: User-facing error messages MUST include a reference to `gcal-organizer doctor` for diagnostics
-- **FR-015**: `gcal-organizer setup-browser` MUST provide guided browser setup: Node.js check, npm dependency install, Chrome profile selection via `charmbracelet/huh`, Chrome launch with `--remote-debugging-port=9222`, and CDP verification
+- **FR-015**: `gcal-organizer setup-browser` MUST create/use a dedicated `gcal-organizer` Chrome profile, launch Chrome with `--remote-debugging-port=9222`, guide first-run Google sign-in, and verify CDP connectivity
 - **FR-016**: `doctor` and `init` MUST use `charmbracelet/lipgloss` styled summary boxes for polished output
 
 ### Non-Functional Requirements

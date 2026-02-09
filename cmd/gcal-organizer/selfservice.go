@@ -157,20 +157,14 @@ var doctorCmd = &cobra.Command{
 			warned++
 		}
 
-		// 7. Chrome profile
-		chromePath := detectChromeProfile()
-		if chromePath != "" {
-			if _, err := os.Stat(chromePath); err == nil {
-				fmt.Println(styledPass(fmt.Sprintf("Chrome profile found (%s)", filepath.Base(chromePath))))
-				passed++
-			} else {
-				fmt.Println(styledWarn(fmt.Sprintf("Chrome profile not found at %s", chromePath)))
-				fmt.Println(styledFix("Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env"))
-				warned++
-			}
+		// 7. Dedicated Chrome profile
+		chromePath := chromeProfilePath()
+		if _, err := os.Stat(chromePath); err == nil {
+			fmt.Println(styledPass(fmt.Sprintf("Dedicated Chrome profile found (%s)", filepath.Base(chromePath))))
+			passed++
 		} else {
-			fmt.Println(styledWarn("Chrome profile path not detected"))
-			fmt.Println(styledFix("Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env"))
+			fmt.Println(styledWarn("Dedicated Chrome profile not yet created"))
+			fmt.Println(styledFix("Run 'gcal-organizer setup-browser' to create it"))
 			warned++
 		}
 
@@ -273,8 +267,8 @@ var initCmd = &cobra.Command{
 				apiKey = "your-gcp-api-key-here"
 			}
 
-			// Detect Chrome profile
-			chromePath := detectChromeProfile()
+			// Dedicated Chrome profile path (deterministic per OS)
+			chromePath := chromeProfilePath()
 
 			// Write .env
 			envContent := generateEnvFile(apiKey, chromePath)
@@ -383,36 +377,24 @@ var uninstallCmd = &cobra.Command{
 
 // --- Helper functions ---
 
-// detectChromeProfile finds the default Chrome profile for the current OS.
-func detectChromeProfile() string {
+// chromeProfilePath returns the OS-appropriate path for the dedicated
+// gcal-organizer Chrome profile. This is deterministic — no filesystem scanning.
+func chromeProfilePath() string {
 	home, _ := os.UserHomeDir()
-	var baseDirs []string
 
 	switch runtime.GOOS {
 	case "darwin":
-		baseDirs = []string{
-			filepath.Join(home, "Library", "Application Support", "Google", "Chrome"),
-		}
+		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "gcal-organizer")
 	case "linux":
-		baseDirs = []string{
-			filepath.Join(home, ".config", "google-chrome"),                                    // Standard
-			filepath.Join(home, ".var", "app", "com.google.Chrome", "config", "google-chrome"), // Flatpak
+		// Prefer Flatpak Chrome data dir if it exists (common on Fedora)
+		flatpakBase := filepath.Join(home, ".var", "app", "com.google.Chrome", "config", "google-chrome")
+		if _, err := os.Stat(flatpakBase); err == nil {
+			return filepath.Join(flatpakBase, "gcal-organizer")
 		}
+		return filepath.Join(home, ".config", "google-chrome", "gcal-organizer")
 	default:
 		return ""
 	}
-
-	// Try common profile names in each base directory
-	profiles := []string{"Default", "Profile 1", "Profile 2", "Profile 3"}
-	for _, baseDir := range baseDirs {
-		for _, p := range profiles {
-			path := filepath.Join(baseDir, p)
-			if _, err := os.Stat(path); err == nil {
-				return path
-			}
-		}
-	}
-	return ""
 }
 
 // loadEnvValue reads a single value from a .env file.
@@ -722,19 +704,16 @@ WantedBy=timers.target
 var setupBrowserCmd = &cobra.Command{
 	Use:   "setup-browser",
 	Short: "Set up Chrome for browser-based task assignment",
-	Long: `Launch Chrome with remote debugging and guide authentication.
+	Long: `Launch Chrome with remote debugging using a dedicated profile.
 
 This command:
   1. Checks Node.js is installed
   2. Installs browser automation dependencies (npm install)
-  3. Detects or prompts for Chrome profile selection
+  3. Creates/uses a dedicated gcal-organizer Chrome profile
   4. Launches Chrome with --remote-debugging-port=9222
-  5. Waits for you to sign in to Google
+  5. Guides you to sign in to Google (first run only)
   6. Verifies Chrome is accessible via CDP`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		home, _ := os.UserHomeDir()
-		configDir := filepath.Join(home, ".gcal-organizer")
-		envFile := filepath.Join(configDir, ".env")
 
 		fmt.Println(styledTitle("🌐 gcal-organizer setup-browser"))
 		fmt.Println()
@@ -775,57 +754,22 @@ This command:
 			fmt.Println(styledPass("Browser dependencies already installed"))
 		}
 
-		// Step 3: Detect/select Chrome profile
+		// Step 3: Dedicated Chrome profile
 		fmt.Println()
-		fmt.Println(subtleStyle.Render("  Step 3/5: Detecting Chrome profile..."))
+		fmt.Println(subtleStyle.Render("  Step 3/5: Setting up dedicated Chrome profile..."))
 
-		// Check env first
-		chromePath := loadEnvValue(envFile, "CHROME_PROFILE_PATH")
+		chromePath := chromeProfilePath()
 		if chromePath == "" {
-			chromePath = detectChromeProfile()
+			fmt.Println(styledFail("Could not determine Chrome profile path for this OS"))
+			return fmt.Errorf("unsupported OS for Chrome profile detection")
 		}
 
-		// Try to discover all profiles and let user pick
-		profiles := discoverChromeProfiles()
-		if len(profiles) > 1 {
-			// Use Huh to let user select
-			options := make([]huh.Option[string], len(profiles))
-			for i, p := range profiles {
-				label := filepath.Base(p)
-				if p == chromePath {
-					label += " (detected)"
-				}
-				options[i] = huh.NewOption(label, p)
-			}
-
-			var selected string
-			form := huh.NewForm(
-				huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Select Chrome profile").
-						Description("Multiple profiles found. Choose which one is signed into Google.").
-						Options(options...).
-						Value(&selected),
-				),
-			)
-			if err := form.Run(); err != nil {
-				return fmt.Errorf("profile selection cancelled: %w", err)
-			}
-			chromePath = selected
-		}
-
-		if chromePath == "" {
-			fmt.Println(styledWarn("No Chrome profile detected"))
-			fmt.Println(styledFix("Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env"))
-			fmt.Println(subtleStyle.Render("     Find yours at chrome://version → 'Profile Path'"))
-			return fmt.Errorf("Chrome profile not found")
-		}
-		fmt.Println(styledPass(fmt.Sprintf("Using profile: %s", filepath.Base(chromePath))))
-
-		// Save to .env if not already set
-		existingPath := loadEnvValue(envFile, "CHROME_PROFILE_PATH")
-		if existingPath != chromePath && existingPath != "" {
-			fmt.Println(subtleStyle.Render(fmt.Sprintf("     Updated CHROME_PROFILE_PATH in .env")))
+		firstRun := false
+		if _, err := os.Stat(chromePath); os.IsNotExist(err) {
+			fmt.Println(styledPass("Will create dedicated profile: gcal-organizer"))
+			firstRun = true
+		} else {
+			fmt.Println(styledPass("Dedicated profile found: gcal-organizer"))
 		}
 
 		// Step 4: Launch Chrome with debugging
@@ -859,16 +803,24 @@ This command:
 			}
 		}
 
-		// Step 5: Prompt user to authenticate
+		// Step 5: Prompt user to authenticate (first run only)
 		fmt.Println()
 		fmt.Println(subtleStyle.Render("  Step 5/5: Google authentication"))
 		fmt.Println()
-		fmt.Println(boxStyle.Render(
-			"  In the Chrome window that opened:\n" +
-				"  1. Go to docs.google.com\n" +
-				"  2. Sign in with your Google account\n" +
-				"  3. Verify you can see your documents\n\n" +
-				"  Press Enter when done..."))
+		if firstRun {
+			fmt.Println(boxStyle.Render(
+				"  A new Chrome window opened with a fresh profile.\n" +
+					"  This profile is dedicated to gcal-organizer.\n\n" +
+					"  1. Sign in with your Google account\n" +
+					"  2. Go to docs.google.com\n" +
+					"  3. Verify you can see your documents\n\n" +
+					"  Press Enter when done..."))
+		} else {
+			fmt.Println(boxStyle.Render(
+				"  Chrome opened with your gcal-organizer profile.\n" +
+					"  You should already be signed in.\n\n" +
+					"  Press Enter to verify..."))
+		}
 		fmt.Println()
 
 		reader := bufio.NewReader(os.Stdin)
@@ -921,52 +873,32 @@ func isPortOpen(port int) bool {
 	return true
 }
 
-// discoverChromeProfiles finds all Chrome profiles on the system.
-func discoverChromeProfiles() []string {
-	home, _ := os.UserHomeDir()
-	var baseDir string
-
+// findChromeBinary locates the Chrome executable for the current OS.
+func findChromeBinary() string {
 	switch runtime.GOOS {
 	case "darwin":
-		baseDir = filepath.Join(home, "Library", "Application Support", "Google", "Chrome")
+		return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 	case "linux":
-		baseDir = filepath.Join(home, ".config", "google-chrome")
-	default:
-		return nil
-	}
-
-	var profiles []string
-	// Check Default plus Profile 1-10
-	candidates := []string{"Default"}
-	for i := 1; i <= 10; i++ {
-		candidates = append(candidates, fmt.Sprintf("Profile %d", i))
-	}
-	for _, p := range candidates {
-		path := filepath.Join(baseDir, p)
-		if _, err := os.Stat(path); err == nil {
-			profiles = append(profiles, path)
+		// Try standard Chrome binaries
+		for _, bin := range []string{"google-chrome", "google-chrome-stable", "chromium-browser"} {
+			if p, err := exec.LookPath(bin); err == nil {
+				return p
+			}
+		}
+		// Try Flatpak Chrome
+		if _, err := exec.LookPath("flatpak"); err == nil {
+			out, err := exec.Command("flatpak", "info", "com.google.Chrome").Output()
+			if err == nil && len(out) > 0 {
+				return "flatpak-chrome" // sentinel handled in launchChrome
+			}
 		}
 	}
-	return profiles
+	return ""
 }
 
 // launchChrome starts Chrome with remote debugging on port 9222.
 func launchChrome(profilePath string) (*exec.Cmd, error) {
-	var chromeBin string
-
-	switch runtime.GOOS {
-	case "darwin":
-		chromeBin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-	case "linux":
-		// Try common Linux Chrome paths
-		for _, bin := range []string{"google-chrome", "google-chrome-stable", "chromium-browser"} {
-			if p, err := exec.LookPath(bin); err == nil {
-				chromeBin = p
-				break
-			}
-		}
-	}
-
+	chromeBin := findChromeBinary()
 	if chromeBin == "" {
 		return nil, fmt.Errorf("Chrome not found. Install Google Chrome and try again")
 	}
@@ -975,12 +907,22 @@ func launchChrome(profilePath string) (*exec.Cmd, error) {
 	userDataDir := filepath.Dir(profilePath)
 	profileName := filepath.Base(profilePath)
 
-	cmd := exec.Command(chromeBin,
-		fmt.Sprintf("--remote-debugging-port=%d", 9222),
-		fmt.Sprintf("--user-data-dir=%s", userDataDir),
-		fmt.Sprintf("--profile-directory=%s", profileName),
-		"https://docs.google.com",
-	)
+	var cmd *exec.Cmd
+	if chromeBin == "flatpak-chrome" {
+		// Flatpak Chrome needs special invocation
+		cmd = exec.Command("flatpak", "run", "com.google.Chrome",
+			fmt.Sprintf("--remote-debugging-port=%d", 9222),
+			fmt.Sprintf("--profile-directory=%s", profileName),
+			"https://docs.google.com",
+		)
+	} else {
+		cmd = exec.Command(chromeBin,
+			fmt.Sprintf("--remote-debugging-port=%d", 9222),
+			fmt.Sprintf("--user-data-dir=%s", userDataDir),
+			fmt.Sprintf("--profile-directory=%s", profileName),
+			"https://docs.google.com",
+		)
+	}
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 

@@ -50,14 +50,15 @@ type Config struct {
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
 
-	// Default Chrome profile path depends on OS
-	chromePath := home + "/Library/Application Support/Google/Chrome/Profile 1"
+	// Dedicated Chrome profile for gcal-organizer automation.
+	// Uses a separate profile to avoid conflicts with user's normal browsing.
+	chromePath := home + "/Library/Application Support/Google/Chrome/gcal-organizer"
 	if runtime.GOOS == "linux" {
-		chromePath = home + "/.config/google-chrome/Default"
-		// Also check Flatpak Chrome (common on Fedora)
-		flatpakPath := home + "/.var/app/com.google.Chrome/config/google-chrome/Default"
-		if _, err := os.Stat(flatpakPath); err == nil {
-			chromePath = flatpakPath
+		chromePath = home + "/.config/google-chrome/gcal-organizer"
+		// Prefer Flatpak Chrome data dir if it exists (common on Fedora)
+		flatpakBase := home + "/.var/app/com.google.Chrome/config/google-chrome"
+		if _, err := os.Stat(flatpakBase); err == nil {
+			chromePath = flatpakBase + "/gcal-organizer"
 		}
 	}
 
