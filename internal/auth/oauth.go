@@ -105,8 +105,18 @@ func (o *OAuthClient) saveToken(token *oauth2.Token) error {
 // getTokenFromWeb starts an OAuth2 flow in the browser.
 func (o *OAuthClient) getTokenFromWeb(ctx context.Context) (*oauth2.Token, error) {
 	authURL := o.config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("🔗 Open this URL in your browser:\n\n%v\n\n", authURL)
-	fmt.Print("📝 Enter the authorization code: ")
+	fmt.Print("🔗 Follow these steps to authorize gcal-organizer:\n\n")
+	fmt.Print("  1. Open this URL in your browser:\n\n")
+	fmt.Printf("     %v\n\n", authURL)
+	fmt.Println("  2. Sign in with your Google account and click 'Allow'")
+	fmt.Println("  3. You'll see a page saying \"This site can't be reached\"")
+	fmt.Println("     — that's expected!")
+	fmt.Println("  4. Look at the URL in your browser's address bar.")
+	fmt.Println("     Find the part after 'code=' and before '&scope='")
+	fmt.Print("     Copy that entire code.\n\n")
+	fmt.Println("     Example URL: http://localhost/?code=4/0AXSc3g...abc&scope=...")
+	fmt.Print("     The code is:                         4/0AXSc3g...abc\n\n")
+	fmt.Print("📝 Paste the authorization code here: ")
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {
