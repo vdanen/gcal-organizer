@@ -44,3 +44,4 @@ build/
 config.local.yaml
 chrome-user-data-dir/
 node_modules/
+gcal-organizer-linux-amd64
