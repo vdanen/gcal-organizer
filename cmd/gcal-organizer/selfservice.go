@@ -267,11 +267,8 @@ var initCmd = &cobra.Command{
 				apiKey = "your-gcp-api-key-here"
 			}
 
-			// Dedicated Chrome profile path (deterministic per OS)
-			chromePath := chromeProfilePath()
-
 			// Write .env
-			envContent := generateEnvFile(apiKey, chromePath)
+			envContent := generateEnvFile(apiKey)
 			if err := os.WriteFile(envFile, []byte(envContent), 0600); err != nil {
 				return fmt.Errorf("failed to write .env file: %w", err)
 			}
@@ -377,24 +374,12 @@ var uninstallCmd = &cobra.Command{
 
 // --- Helper functions ---
 
-// chromeProfilePath returns the OS-appropriate path for the dedicated
-// gcal-organizer Chrome profile. This is deterministic — no filesystem scanning.
+// chromeProfilePath returns the path for the dedicated gcal-organizer Chrome
+// profile. Stored alongside other config at ~/.gcal-organizer/chrome-profile.
+// Can be overridden with CHROME_PROFILE_PATH in .env for advanced users.
 func chromeProfilePath() string {
 	home, _ := os.UserHomeDir()
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "gcal-organizer")
-	case "linux":
-		// Prefer Flatpak Chrome data dir if it exists (common on Fedora)
-		flatpakBase := filepath.Join(home, ".var", "app", "com.google.Chrome", "config", "google-chrome")
-		if _, err := os.Stat(flatpakBase); err == nil {
-			return filepath.Join(flatpakBase, "gcal-organizer")
-		}
-		return filepath.Join(home, ".config", "google-chrome", "gcal-organizer")
-	default:
-		return ""
-	}
+	return filepath.Join(home, ".gcal-organizer", "chrome-profile")
 }
 
 // loadEnvValue reads a single value from a .env file.
@@ -418,7 +403,7 @@ func loadEnvValue(envFile, key string) string {
 
 // generateEnvFile creates the .env file content.
 // All values are double-quoted for bash source compatibility.
-func generateEnvFile(apiKey, chromePath string) string {
+func generateEnvFile(apiKey string) string {
 	home, _ := os.UserHomeDir()
 	var b strings.Builder
 	b.WriteString("# GCal Organizer Configuration\n")
@@ -435,11 +420,6 @@ func generateEnvFile(apiKey, chromePath string) string {
 	b.WriteString("GCAL_FILENAME_KEYWORDS=\"Notes,Meeting\"\n\n")
 	b.WriteString("# Optional: Gemini model\n")
 	b.WriteString("GEMINI_MODEL=\"gemini-2.0-flash\"\n")
-	if chromePath != "" {
-		b.WriteString(fmt.Sprintf("\n# Chrome profile for browser automation (auto-detected)\nCHROME_PROFILE_PATH=\"%s\"\n", chromePath))
-	} else {
-		b.WriteString("\n# Chrome profile for browser automation\n# Find yours at chrome://version → 'Profile Path'\n# CHROME_PROFILE_PATH=\n")
-	}
 	return b.String()
 }
 
