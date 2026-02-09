@@ -708,8 +708,8 @@ var setupBrowserCmd = &cobra.Command{
 
 This command:
   1. Checks Node.js is installed
-  2. Installs browser automation dependencies (npm install)
-  3. Creates/uses a dedicated gcal-organizer Chrome profile
+  2. Creates/uses a dedicated gcal-organizer Chrome profile
+  3. Checks browser automation dependencies (npm install)
   4. Launches Chrome with --remote-debugging-port=9222
   5. Guides you to sign in to Google (first run only)
   6. Verifies Chrome is accessible via CDP`,
@@ -728,35 +728,9 @@ This command:
 		}
 		fmt.Println(styledPass(fmt.Sprintf("Node.js %s", strings.TrimSpace(string(nodeOut)))))
 
-		// Step 2: Install browser deps
+		// Step 2: Dedicated Chrome profile
 		fmt.Println()
-		fmt.Println(subtleStyle.Render("  Step 2/5: Checking browser automation dependencies..."))
-		browserDir := findBrowserDir()
-		if browserDir == "" {
-			fmt.Println(styledFail("Browser directory not found"))
-			fmt.Println(styledFix("Run from the project root or check your installation"))
-			return fmt.Errorf("browser directory not found")
-		}
-
-		nodeModules := filepath.Join(browserDir, "node_modules")
-		if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
-			fmt.Println(subtleStyle.Render("     Installing npm dependencies..."))
-			npmCmd := exec.Command("npm", "install")
-			npmCmd.Dir = browserDir
-			npmCmd.Stdout = os.Stdout
-			npmCmd.Stderr = os.Stderr
-			if err := npmCmd.Run(); err != nil {
-				fmt.Println(styledFail("npm install failed"))
-				return fmt.Errorf("npm install failed: %w", err)
-			}
-			fmt.Println(styledPass("Browser dependencies installed"))
-		} else {
-			fmt.Println(styledPass("Browser dependencies already installed"))
-		}
-
-		// Step 3: Dedicated Chrome profile
-		fmt.Println()
-		fmt.Println(subtleStyle.Render("  Step 3/5: Setting up dedicated Chrome profile..."))
+		fmt.Println(subtleStyle.Render("  Step 2/5: Setting up dedicated Chrome profile..."))
 
 		chromePath := chromeProfilePath()
 		if chromePath == "" {
@@ -770,6 +744,31 @@ This command:
 			firstRun = true
 		} else {
 			fmt.Println(styledPass("Dedicated profile found: gcal-organizer"))
+		}
+
+		// Step 3: Check browser deps (non-blocking — profile setup is more important)
+		fmt.Println()
+		fmt.Println(subtleStyle.Render("  Step 3/5: Checking browser automation dependencies..."))
+		browserDir := findBrowserDir()
+		if browserDir == "" {
+			fmt.Println(styledWarn("Browser directory not found"))
+			fmt.Println(styledFix("Install browser automation or run from project root for Step 3 (task assignment)"))
+		} else {
+			nodeModules := filepath.Join(browserDir, "node_modules")
+			if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
+				fmt.Println(subtleStyle.Render("     Installing npm dependencies..."))
+				npmCmd := exec.Command("npm", "install")
+				npmCmd.Dir = browserDir
+				npmCmd.Stdout = os.Stdout
+				npmCmd.Stderr = os.Stderr
+				if err := npmCmd.Run(); err != nil {
+					fmt.Println(styledWarn("npm install failed — task assignment may not work"))
+				} else {
+					fmt.Println(styledPass("Browser dependencies installed"))
+				}
+			} else {
+				fmt.Println(styledPass("Browser dependencies already installed"))
+			}
 		}
 
 		// Step 4: Launch Chrome with debugging
