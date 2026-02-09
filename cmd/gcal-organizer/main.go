@@ -844,6 +844,14 @@ func loadDotEnv(path, home string) {
 		key := strings.TrimSpace(parts[0])
 		val := strings.TrimSpace(parts[1])
 
+		// Strip surrounding quotes (double or single) for bash compatibility
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') ||
+				(val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+
 		// Expand ~ to home directory
 		if strings.HasPrefix(val, "~/") {
 			val = home + val[1:]
