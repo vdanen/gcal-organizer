@@ -68,6 +68,9 @@ var doctorCmd = &cobra.Command{
 		// 1. Config directory
 		if info, err := os.Stat(configDir); err == nil && info.IsDir() {
 			fmt.Println(styledPass("Config directory exists"))
+			if verbose {
+				fmt.Println(subtleStyle.Render("          " + configDir))
+			}
 			passed++
 		} else {
 			fmt.Println(styledFail("Config directory ~/.gcal-organizer/ not found"))
@@ -79,6 +82,9 @@ var doctorCmd = &cobra.Command{
 		envFile := filepath.Join(configDir, ".env")
 		if _, err := os.Stat(envFile); err == nil {
 			fmt.Println(styledPass("Environment file (.env) exists"))
+			if verbose {
+				fmt.Println(subtleStyle.Render("          " + envFile))
+			}
 			passed++
 		} else {
 			fmt.Println(styledFail("Environment file ~/.gcal-organizer/.env not found"))
@@ -90,6 +96,9 @@ var doctorCmd = &cobra.Command{
 		credFile := filepath.Join(configDir, "credentials.json")
 		if _, err := os.Stat(credFile); err == nil {
 			fmt.Println(styledPass("Google credentials (credentials.json) found"))
+			if verbose {
+				fmt.Println(subtleStyle.Render("          " + credFile))
+			}
 			passed++
 		} else {
 			fmt.Println(styledFail("Google credentials not found at " + credFile))
@@ -109,6 +118,9 @@ var doctorCmd = &cobra.Command{
 				if err := json.NewDecoder(f).Decode(&tok); err == nil {
 					if tok.Expiry.After(time.Now()) || tok.RefreshToken != "" {
 						fmt.Println(styledPass("OAuth token found (authenticated)"))
+						if verbose {
+							fmt.Println(subtleStyle.Render("          " + tokenFile))
+						}
 						passed++
 					} else {
 						fmt.Println(styledWarn("OAuth token exists but may be expired"))
@@ -150,6 +162,11 @@ var doctorCmd = &cobra.Command{
 		if nodeOut, err := exec.Command("node", "--version").Output(); err == nil {
 			version := strings.TrimSpace(string(nodeOut))
 			fmt.Println(styledPass(fmt.Sprintf("Node.js found (%s)", version)))
+			if verbose {
+				if nodePath, err := exec.LookPath("node"); err == nil {
+					fmt.Println(subtleStyle.Render("          " + nodePath))
+				}
+			}
 			passed++
 		} else {
 			fmt.Println(styledWarn("Node.js not found — task assignment unavailable"))
@@ -159,12 +176,26 @@ var doctorCmd = &cobra.Command{
 
 		// 7. Dedicated Chrome profile
 		chromePath := chromeProfilePath()
+		// Check if overridden via env
+		envChromePath := os.Getenv("CHROME_PROFILE_PATH")
+		if envChromePath == "" {
+			envChromePath = loadEnvValue(envFile, "CHROME_PROFILE_PATH")
+		}
+		if envChromePath != "" {
+			chromePath = envChromePath
+		}
 		if _, err := os.Stat(chromePath); err == nil {
 			fmt.Println(styledPass(fmt.Sprintf("Dedicated Chrome profile found (%s)", filepath.Base(chromePath))))
+			if verbose {
+				fmt.Println(subtleStyle.Render("          " + chromePath))
+			}
 			passed++
 		} else {
 			fmt.Println(styledWarn("Dedicated Chrome profile not yet created"))
 			fmt.Println(styledFix("Run 'gcal-organizer setup-browser' to create it"))
+			if verbose {
+				fmt.Println(subtleStyle.Render("          Expected at: " + chromePath))
+			}
 			warned++
 		}
 
@@ -184,6 +215,9 @@ var doctorCmd = &cobra.Command{
 			nodeModules := filepath.Join(browserDir, "node_modules")
 			if _, err := os.Stat(nodeModules); err == nil {
 				fmt.Println(styledPass("Browser automation deps installed"))
+				if verbose {
+					fmt.Println(subtleStyle.Render("          " + browserDir))
+				}
 				passed++
 			} else {
 				fmt.Println(styledWarn("Browser automation deps not installed"))
