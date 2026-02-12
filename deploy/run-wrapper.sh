@@ -31,6 +31,9 @@ else
     fi
 fi
 
+# Change to project root so browser/ directory is found
+cd /Users/jflowers/Projects/github/jflowers/gcal-organizer
+
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting gcal-organizer run"
 "$BINARY" run #--verbose
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Completed gcal-organizer run"
