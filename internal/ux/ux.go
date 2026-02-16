@@ -63,11 +63,11 @@ func MissingNodeJS() *ActionError {
 	}
 }
 
-// MissingChromeProfile returns an error for missing Chrome profile.
+// MissingChromeProfile returns an error for missing Chrome data directory.
 func MissingChromeProfile(path string) *ActionError {
 	return &ActionError{
-		Message: fmt.Sprintf("Chrome profile not found at %s", path),
-		Fix:     "Set CHROME_PROFILE_PATH in ~/.gcal-organizer/.env — find yours at chrome://version",
+		Message: fmt.Sprintf("Chrome data directory not found at %s", path),
+		Fix:     "Run 'gcal-organizer setup-browser' to create it",
 	}
 }
 

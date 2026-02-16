@@ -18,7 +18,7 @@ As a new user who just downloaded the binary, I want `gcal-organizer init` to gu
 **Acceptance Scenarios**:
 
 1. **Given** `~/.gcal-organizer/` does not exist, **When** I run `gcal-organizer init`, **Then** it creates the directory, generates `.env` template, and prompts for `GEMINI_API_KEY`
-2. **Given** I provide a valid API key, **When** init continues, **Then** it auto-detects my Chrome profile path and writes it to `.env`
+2. **Given** I provide a valid API key, **When** init continues, **Then** it writes the key to `.env`
 3. **Given** init completes, **When** I run `gcal-organizer run --dry-run`, **Then** config loads correctly from `~/.gcal-organizer/.env`
 4. **Given** `~/.gcal-organizer/` already exists, **When** I run `gcal-organizer init`, **Then** it skips existing files and only creates missing ones
 5. **Given** I pass `--non-interactive`, **When** I run `gcal-organizer init`, **Then** it uses defaults without prompting
@@ -72,7 +72,7 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 2. **Given** GEMINI_API_KEY is empty, **When** any command runs, **Then** the error includes: `Set GEMINI_API_KEY in ~/.gcal-organizer/.env or run 'gcal-organizer init'`
 3. **Given** Node.js is not found, **When** assign-tasks runs, **Then** the error includes: `Install Node.js 18+ from https://nodejs.org`
 4. **Given** OAuth token is expired, **When** any API call fails, **Then** the error includes: `Run 'gcal-organizer auth login' to re-authenticate`
-5. **Given** Chrome profile is not found, **When** assign-tasks runs, **Then** the error includes: `Set CHROME_PROFILE_PATH. Find yours at chrome://version`
+5. **Given** Chrome data directory is not found, **When** assign-tasks runs, **Then** the error includes: `Run 'gcal-organizer setup-browser' to create it`
 
 ---
 
@@ -93,19 +93,19 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 
 - **FR-001**: `gcal-organizer init` MUST create `~/.gcal-organizer/` and generate a `.env` file
 - **FR-002**: `gcal-organizer init` MUST prompt for GEMINI_API_KEY interactively (or accept `--api-key` flag)
-- **FR-003**: `gcal-organizer init` MUST set `CHROME_PROFILE_PATH` to a dedicated `gcal-organizer` Chrome profile directory for the current OS
+- **FR-003**: `gcal-organizer init` MUST create `~/.gcal-organizer/` directory structure for the current OS
 - **FR-004**: `gcal-organizer init` MUST support `--non-interactive` flag for scripted use
-- **FR-005**: `gcal-organizer doctor` MUST check: config dir, credentials, token validity, API key, Node.js, Chrome profile, service status
+- **FR-005**: `gcal-organizer doctor` MUST check: config dir, credentials, token validity, API key, Node.js, Chrome data directory, service status
 - **FR-006**: `gcal-organizer doctor` MUST output actionable fix commands for each issue
 - **FR-007**: `gcal-organizer install` MUST detect OS and install the appropriate service (launchd/systemd)
 - **FR-008**: `gcal-organizer install` MUST be idempotent
 - **FR-009**: `gcal-organizer uninstall` MUST stop and remove all service files
 - **FR-010**: All error messages MUST include a `Fix:` line with exact resolution steps
 - **FR-011**: `gcal-organizer init` MUST be idempotent — skip existing files, fill in missing ones
-- **FR-012**: Self-service commands SHOULD use `charmbracelet/huh` for interactive prompts (API key, Chrome profile selection)
+- **FR-012**: Self-service commands SHOULD use `charmbracelet/huh` for interactive prompts (API key input)
 - **FR-013**: Self-service commands SHOULD use `charmbracelet/lipgloss` for styled terminal output
 - **FR-014**: User-facing error messages MUST include a reference to `gcal-organizer doctor` for diagnostics
-- **FR-015**: `gcal-organizer setup-browser` MUST create/use a dedicated `gcal-organizer` Chrome profile, launch Chrome with `--remote-debugging-port=9222`, guide first-run Google sign-in, and verify CDP connectivity
+- **FR-015**: `gcal-organizer setup-browser` MUST create/use `~/.gcal-organizer/chrome-data/`, launch Chrome with `--user-data-dir` and `--remote-debugging-port=9222`, guide first-run Google sign-in, and verify CDP connectivity
 - **FR-016**: `doctor` and `init` MUST use `charmbracelet/lipgloss` styled summary boxes for polished output
 
 ### Non-Functional Requirements

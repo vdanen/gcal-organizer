@@ -26,7 +26,7 @@ graph LR
 - Better documentation and community
 - More stable for complex web apps like Google Docs
 - TypeScript API is mature for canvas-based UI interaction
-- Can use persistent Chrome profile for auth
+- Can use dedicated `~/.gcal-organizer/chrome-data/` directory for auth
 
 **Integration**: Go CLI executes Playwright script via `npx tsx assign-tasks.ts`
 
@@ -51,7 +51,7 @@ graph LR
 
 #### [NEW] [browser/assign-tasks.ts](file:///Users/jflowers/Projects/github/jflowers/gcal-organizer/browser/assign-tasks.ts)
 Playwright script that:
-1. Opens Google Doc by ID using persistent Chrome profile
+1. Opens Google Doc by ID using dedicated Chrome data directory
 2. Navigates to "Suggested next steps" via Ctrl+F
 3. For each assignment:
    - Dynamically increases search text until unique (1 of 1 match)

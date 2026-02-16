@@ -87,7 +87,7 @@ As a user running `gcal-organizer run`, I want task assignment to happen automat
 ### Functional Requirements
 
 - **FR-001**: System MUST open a browser and navigate to the target Google Doc
-- **FR-002**: System MUST use a dedicated `gcal-organizer` Chrome profile for browser automation, isolated from the user's default browsing profile to avoid profile lock conflicts
+- **FR-002**: System MUST use a dedicated `~/.gcal-organizer/chrome-data/` directory for browser automation, isolated from the user's default browsing profile to avoid profile lock conflicts
 - **FR-003**: System MUST use Ctrl+F to navigate to checkbox text in the document
 - **FR-004**: System MUST identify unchecked checkbox items in the "Suggested next steps" section via the Docs API
 - **FR-005**: System MUST use Gemini to extract assignee names from each checkbox text
@@ -106,7 +106,7 @@ As a user running `gcal-organizer run`, I want task assignment to happen automat
 ### Configuration Requirements
 
 - **CR-001**: `GEMINI_API_KEY` - GCP API key for Gemini (string, required)
-- **CR-002**: `CHROME_PROFILE_PATH` - Path to dedicated Chrome profile directory managed by gcal-organizer (created by `gcal-organizer setup-browser`)
+- **CR-002**: Chrome data directory is fixed at `~/.gcal-organizer/chrome-data/` — created by `gcal-organizer setup-browser`
 
 ### Key Entities
 

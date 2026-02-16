@@ -166,22 +166,9 @@ The Google Docs API can read document text and checkbox state, but cannot:
 
 Playwright automates Chrome to hover over checkboxes, detect the "Assign" tooltip, and click it — the only way to use this feature programmatically.
 
-### Chrome Profile Configuration
+### Chrome Data Directory
 
-The tool launches Chrome with your existing profile so it's already authenticated with Google. The default profile path is:
-
-| OS | Default Path |
-|----|-------------|
-| **macOS** | `~/Library/Application Support/Google/Chrome/Profile 1` |
-| **Linux** | `~/.config/google-chrome/Profile 1` |
-
-To use a different profile, set the `CHROME_PROFILE_PATH` environment variable:
-
-```bash
-export CHROME_PROFILE_PATH="$HOME/Library/Application Support/Google/Chrome/Default"
-```
-
-> **Note**: You can find your Chrome profile path by navigating to `chrome://version` in Chrome and looking at the "Profile Path" field.
+The tool creates a dedicated Chrome data directory at `~/.gcal-organizer/chrome-data/` to keep browser state isolated from your personal Chrome profile. Run `gcal-organizer setup-browser` to create it and sign in with your Google account.
 
 ### Troubleshooting Browser Automation
 

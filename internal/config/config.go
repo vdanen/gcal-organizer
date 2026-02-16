@@ -52,7 +52,7 @@ func DefaultConfig() *Config {
 
 	// Dedicated Chrome profile for gcal-organizer automation.
 	// Stored alongside other config — same path on all OSes.
-	chromePath := home + "/.gcal-organizer/chrome-profile"
+	chromePath := home + "/.gcal-organizer/chrome-data"
 
 	return &Config{
 		MasterFolderName:  "Meeting Notes",

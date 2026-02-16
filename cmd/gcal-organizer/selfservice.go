@@ -174,18 +174,10 @@ var doctorCmd = &cobra.Command{
 			warned++
 		}
 
-		// 7. Dedicated Chrome profile
+		// 7. Dedicated Chrome data directory
 		chromePath := chromeProfilePath()
-		// Check if overridden via env
-		envChromePath := os.Getenv("CHROME_PROFILE_PATH")
-		if envChromePath == "" {
-			envChromePath = loadEnvValue(envFile, "CHROME_PROFILE_PATH")
-		}
-		if envChromePath != "" {
-			chromePath = envChromePath
-		}
 		if _, err := os.Stat(chromePath); err == nil {
-			fmt.Println(styledPass(fmt.Sprintf("Dedicated Chrome profile found (%s)", filepath.Base(chromePath))))
+			fmt.Println(styledPass(fmt.Sprintf("Dedicated Chrome data dir found (%s)", filepath.Base(chromePath))))
 			if verbose {
 				fmt.Println(subtleStyle.Render("          " + chromePath))
 			}
@@ -409,11 +401,10 @@ var uninstallCmd = &cobra.Command{
 // --- Helper functions ---
 
 // chromeProfilePath returns the path for the dedicated gcal-organizer Chrome
-// profile. Stored alongside other config at ~/.gcal-organizer/chrome-profile.
-// Can be overridden with CHROME_PROFILE_PATH in .env for advanced users.
+// data directory at ~/.gcal-organizer/chrome-data.
 func chromeProfilePath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".gcal-organizer", "chrome-profile")
+	return filepath.Join(home, ".gcal-organizer", "chrome-data")
 }
 
 // loadEnvValue reads a single value from a .env file.
@@ -916,23 +907,18 @@ func launchChrome(profilePath string) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("Chrome not found. Install Google Chrome and try again")
 	}
 
-	// Get the user data dir (parent of profile dir)
-	userDataDir := filepath.Dir(profilePath)
-	profileName := filepath.Base(profilePath)
-
 	var cmd *exec.Cmd
 	if chromeBin == "flatpak-chrome" {
 		// Flatpak Chrome needs special invocation
 		cmd = exec.Command("flatpak", "run", "com.google.Chrome",
 			fmt.Sprintf("--remote-debugging-port=%d", 9222),
-			fmt.Sprintf("--profile-directory=%s", profileName),
+			fmt.Sprintf("--user-data-dir=%s", profilePath),
 			"https://docs.google.com",
 		)
 	} else {
 		cmd = exec.Command(chromeBin,
 			fmt.Sprintf("--remote-debugging-port=%d", 9222),
-			fmt.Sprintf("--user-data-dir=%s", userDataDir),
-			fmt.Sprintf("--profile-directory=%s", profileName),
+			fmt.Sprintf("--user-data-dir=%s", profilePath),
 			"https://docs.google.com",
 		)
 	}
