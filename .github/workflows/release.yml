@@ -36,7 +36,7 @@ jobs:
             arch="${target#*/}"
             output="dist/gcal-organizer-${os}-${arch}"
             echo "Building ${os}/${arch}..."
-            GOOS=$os GOARCH=$arch go build -ldflags="-s -w" -o "$output" ./cmd/gcal-organizer
+            GOOS=$os GOARCH=$arch go build -ldflags="-s -w -X main.Version=${GITHUB_REF_NAME}" -o "$output" ./cmd/gcal-organizer
           done
           ls -lh dist/
 

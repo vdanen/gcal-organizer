@@ -11,7 +11,7 @@ class GcalOrganizer < Formula
 
   def install
     # Build the Go binary
-    system "go", "build", *std_go_args(ldflags: "-s -w"), "./cmd/gcal-organizer"
+    system "go", "build", *std_go_args(ldflags: "-s -w -X main.Version=v#{version}"), "./cmd/gcal-organizer"
 
     # Install man page
     man1.install "man/gcal-organizer.1"

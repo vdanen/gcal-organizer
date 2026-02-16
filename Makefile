@@ -12,6 +12,10 @@ GOGET=$(GOCMD) get
 GOVET=$(GOCMD) vet
 GOFMT=gofmt
 
+# Version from git tags (injected at build time)
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -s -w -X main.Version=$(VERSION)
+
 # Deploy paths
 DEPLOY_DIR=$(CURDIR)/deploy
 WRAPPER_SRC=$(DEPLOY_DIR)/run-wrapper.sh
@@ -23,7 +27,7 @@ WRAPPER_DEST=$(HOME)/.local/bin/gcal-organizer-wrapper.sh
 
 # Build the binary
 build:
-	$(GOBUILD) -o $(BINARY_NAME) $(BINARY_PATH)
+	$(GOBUILD) -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) $(BINARY_PATH)
 
 # Run tests
 test:
@@ -44,7 +48,7 @@ dry-run:
 
 # Install the binary to GOPATH/bin and man page
 install:
-	$(GOCMD) install $(BINARY_PATH)
+	$(GOCMD) install -ldflags="$(LDFLAGS)" $(BINARY_PATH)
 	@if [ -d /usr/local/share/man/man1 ] && [ -w /usr/local/share/man/man1 ]; then \
 		cp man/gcal-organizer.1 /usr/local/share/man/man1/; \
 		echo "Man page installed to /usr/local/share/man/man1/"; \
