@@ -170,10 +170,21 @@ Playwright automates Chrome to hover over checkboxes, detect the "Assign" toolti
 
 The tool creates a dedicated Chrome data directory at `~/.gcal-organizer/chrome-data/` to keep browser state isolated from your personal Chrome profile. Run `gcal-organizer setup-browser` to create it and sign in with your Google account.
 
+#### Flatpak Chrome (Fedora)
+
+If Chrome is installed via Flatpak (common on Fedora), you must grant it filesystem access to the config directory before `setup-browser` will work:
+
+```bash
+flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome
+```
+
+This is required because Flatpak sandboxes Chrome by default, blocking access to `~/.gcal-organizer/chrome-data/`. Without this override, Chrome will fail to create or read the data directory.
+
 ### Troubleshooting Browser Automation
 
 - **"Browser closed unexpectedly"**: Make sure Chrome is not already running, or that remote debugging is not conflicting with another instance.
 - **Tasks not assigned**: The script uses a hover-then-detect pattern. Ensure the Google Doc has the "Suggested next steps" checkboxes visible.
+- **Flatpak Chrome can't access data directory**: Run `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome` to grant access.
 
 ---
 

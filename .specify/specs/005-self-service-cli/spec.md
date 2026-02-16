@@ -73,6 +73,7 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 3. **Given** Node.js is not found, **When** assign-tasks runs, **Then** the error includes: `Install Node.js 18+ from https://nodejs.org`
 4. **Given** OAuth token is expired, **When** any API call fails, **Then** the error includes: `Run 'gcal-organizer auth login' to re-authenticate`
 5. **Given** Chrome data directory is not found, **When** assign-tasks runs, **Then** the error includes: `Run 'gcal-organizer setup-browser' to create it`
+6. **Given** Chrome is installed via Flatpak without filesystem access to `~/.gcal-organizer/`, **When** `setup-browser` runs, **Then** it detects the sandbox restriction and provides the fix: `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome`
 
 ---
 
@@ -86,6 +87,8 @@ As a user hitting an error, I want the error message to tell me exactly what to 
   → `doctor` will detect it; no reconfig needed since Steps 1-2 work without it
 - What if the config directory has wrong permissions?
   → `doctor` checks and reports with fix: `chmod 700 ~/.gcal-organizer`
+- What if Chrome is installed via Flatpak and can't access `~/.gcal-organizer/chrome-data/`?
+  → Flatpak sandboxes Chrome by default. `setup-browser` and `doctor` detect Flatpak installs and guide user to run `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome`
 
 ## Requirements *(mandatory)*
 
@@ -107,6 +110,8 @@ As a user hitting an error, I want the error message to tell me exactly what to 
 - **FR-014**: User-facing error messages MUST include a reference to `gcal-organizer doctor` for diagnostics
 - **FR-015**: `gcal-organizer setup-browser` MUST create/use `~/.gcal-organizer/chrome-data/`, launch Chrome with `--user-data-dir` and `--remote-debugging-port=9222`, guide first-run Google sign-in, and verify CDP connectivity
 - **FR-016**: `doctor` and `init` MUST use `charmbracelet/lipgloss` styled summary boxes for polished output
+- **FR-017**: `setup-browser` MUST detect Flatpak Chrome installs and check/prompt for `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome` before launching
+- **FR-018**: `doctor` MUST detect Flatpak Chrome and warn if filesystem access has not been granted to `~/.gcal-organizer/`
 
 ### Non-Functional Requirements
 

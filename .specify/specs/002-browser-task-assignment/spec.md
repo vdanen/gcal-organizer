@@ -81,6 +81,8 @@ As a user running `gcal-organizer run`, I want task assignment to happen automat
   → Parse gracefully, log the error, skip the item
 - What happens when text contains hidden control characters?
   → Dual-layer sanitization: Go-side `unicode.IsControl`/`IsPrint` + TS-side regex strip
+- What happens when Chrome is installed via Flatpak and `--user-data-dir` points outside the sandbox?
+  → Flatpak's sandbox blocks access to `~/.gcal-organizer/chrome-data/` by default. User must run `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome` to grant access. `setup-browser` and `doctor` should detect this and provide the fix command.
 
 ## Requirements *(mandatory)*
 
@@ -102,11 +104,13 @@ As a user running `gcal-organizer run`, I want task assignment to happen automat
 - **FR-014**: System MUST be integrated as Step 3 in the `run` command's full workflow
 - **FR-015**: CLI MUST provide `setup-browser` command to launch Chrome with debugging port and guide Google account authentication
 - **FR-016**: `doctor` MUST check browser automation readiness (npm deps in `browser/`, Chrome debugging port 9222)
+- **FR-017**: When Chrome is detected as a Flatpak install, `setup-browser` MUST check/guide the user to grant filesystem access via `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome`
 
 ### Configuration Requirements
 
 - **CR-001**: `GEMINI_API_KEY` - GCP API key for Gemini (string, required)
 - **CR-002**: Chrome data directory is fixed at `~/.gcal-organizer/chrome-data/` — created by `gcal-organizer setup-browser`
+- **CR-003**: On Flatpak Chrome installs, filesystem access must be granted: `flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome`
 
 ### Key Entities
 
