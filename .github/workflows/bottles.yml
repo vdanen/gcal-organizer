@@ -56,7 +56,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          # Find the generated bottle tarball
+          # Find the generated bottle tarball (brew bottle uses double-hyphen)
           BOTTLE_FILE=$(ls gcal-organizer--*.tar.gz 2>/dev/null | head -1)
           if [ -z "$BOTTLE_FILE" ]; then
             echo "No bottle file found"
@@ -64,8 +64,12 @@ jobs:
             exit 1
           fi
 
-          echo "Uploading bottle: $BOTTLE_FILE to release $TAG"
-          gh release upload "$TAG" "$BOTTLE_FILE" \
+          # Rename to single hyphen (brew install expects single hyphen in URLs)
+          FIXED_FILE=$(echo "$BOTTLE_FILE" | sed 's/gcal-organizer--/gcal-organizer-/')
+          mv "$BOTTLE_FILE" "$FIXED_FILE"
+
+          echo "Uploading bottle: $FIXED_FILE to release $TAG"
+          gh release upload "$TAG" "$FIXED_FILE" \
             --repo "${{ github.repository }}" \
             --clobber
 
