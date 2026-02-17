@@ -68,7 +68,7 @@ As a developer, I want pushing a version tag (e.g., `v1.1.0`) to automatically c
 - **FR-012**: A `make ci` target MUST exist that mirrors GitHub Actions CI checks exactly (check-only gofmt, go mod tidy diff, vet, build, test -race)
 - **FR-013**: Pre-push hooks SHOULD be available via `make install-hooks` to catch CI failures locally
 - **FR-014**: Release workflow MUST auto-publish the Homebrew formula to the tap repo (`jflowers/homebrew-gcal-organizer`)
-- **FR-015**: A bottle build workflow MUST build pre-compiled bottles for macOS (arm64, x86_64) and Linux (x86_64) on release
+- **FR-015**: A bottle build workflow MUST build pre-compiled bottles for macOS (arm64) and Linux (x86_64) on release
 
 ## Success Criteria *(mandatory)*
 

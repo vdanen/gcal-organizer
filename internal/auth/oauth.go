@@ -13,7 +13,6 @@ import (
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
-	"google.golang.org/api/tasks/v1"
 )
 
 // Scopes required for Google Workspace APIs
@@ -21,7 +20,6 @@ var Scopes = []string{
 	drive.DriveScope,
 	docs.DocumentsScope,
 	calendar.CalendarReadonlyScope,
-	tasks.TasksScope,
 }
 
 // OAuthClient handles OAuth2 authentication for Google Workspace APIs.

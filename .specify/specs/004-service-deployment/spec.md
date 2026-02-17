@@ -63,6 +63,8 @@ As a user, I want to review logs from previous runs to troubleshoot issues.
   → The service logs the auth error and exits; user re-authenticates manually
 - What happens on network failure?
   → API errors are logged, service exits non-zero, runs again next hour
+- What happens when the log file grows too large?
+  → The run wrapper rotates the log file when it exceeds the size limit, keeping one backup (`.1`) so at most 2× the limit is used
 
 ---
 
@@ -111,7 +113,9 @@ As a user, I want to read `man gcal-organizer` for offline reference of all comm
 - **FR-012**: Release workflow MUST attach the Homebrew formula to the GitHub Release
 - **FR-013**: A Homebrew tap (`jflowers/homebrew-gcal-organizer`) MUST exist for `brew tap` + `brew install`
 - **FR-014**: Release workflow MUST auto-publish the updated formula to the tap on every tagged release
-- **FR-015**: Pre-compiled bottles MUST be built for macOS (arm64, x86_64) and Linux (x86_64) on release
+- **FR-015**: Pre-compiled bottles MUST be built for macOS (arm64) and Linux (x86_64) on release
+- **FR-016**: On macOS, the run wrapper MUST rotate the log file when it exceeds 5 MB, keeping at most one rotated backup (`.1`)
+- **FR-017**: On Linux, log rotation is handled by journalctl and requires no additional configuration
 
 ### Configuration Requirements
 
@@ -131,4 +135,5 @@ As a user, I want to read `man gcal-organizer` for offline reference of all comm
 - **SC-007**: `man gcal-organizer` renders the full manual
 - **SC-008**: `brew tap jflowers/gcal-organizer` taps the formula successfully
 - **SC-009**: Bottles are available for macOS and Linux after a release
+- **SC-010**: Log disk usage MUST NOT exceed 10 MB (5 MB active + 5 MB rotated backup) on macOS
 

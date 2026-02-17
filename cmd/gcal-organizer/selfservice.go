@@ -641,6 +641,19 @@ fi
 # Override days to look back for service mode (1 day)
 export GCAL_DAYS_TO_LOOK_BACK=1
 
+# --- Log rotation (FR-016) ---
+# Rotate log when it exceeds 5 MB, keeping one backup (.1).
+# Max disk usage: ~10 MB (5 MB active + 5 MB rotated).
+LOG_FILE="${HOME}/Library/Logs/gcal-organizer.log"
+MAX_LOG_BYTES=$((5 * 1024 * 1024))  # 5 MB
+if [ -f "$LOG_FILE" ]; then
+    LOG_SIZE=$(stat -f%%z "$LOG_FILE" 2>/dev/null || stat --format=%%s "$LOG_FILE" 2>/dev/null || echo 0)
+    if [ "$LOG_SIZE" -gt "$MAX_LOG_BYTES" ]; then
+        mv "$LOG_FILE" "${LOG_FILE}.1"
+        echo "$(date '+%%Y-%%m-%%d %%H:%%M:%%S') — Log rotated (was ${LOG_SIZE} bytes)"
+    fi
+fi
+
 echo "$(date '+%%Y-%%m-%%d %%H:%%M:%%S') — Starting gcal-organizer run"
 %s run
 echo "$(date '+%%Y-%%m-%%d %%H:%%M:%%S') — Completed gcal-organizer run"
