@@ -143,6 +143,23 @@ make service-trigger    # Run immediately
 .PP
 The service runs with GCAL_DAYS_TO_LOOK_BACK=1 to process the last day of events.
 On macOS it uses launchd; on Linux it uses systemd user timers.
+.SH NOTES
+.SS Flatpak Chrome (Fedora)
+If Chrome is installed via Flatpak, its sandbox blocks access to the
+.I ~/.gcal-organizer/chrome-data/
+directory by default. Grant access with:
+.PP
+.RS
+.nf
+flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome
+.fi
+.RE
+.PP
+The
+.B doctor
+and
+.B setup-browser
+commands will detect Flatpak Chrome and warn if this override is missing.
 .SH DATA PRIVACY
 Only the text of individual checkbox items is sent to Gemini AI for assignee
 extraction. Full document contents are never uploaded. OAuth tokens and

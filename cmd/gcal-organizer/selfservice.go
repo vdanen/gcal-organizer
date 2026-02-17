@@ -191,6 +191,18 @@ var doctorCmd = &cobra.Command{
 			warned++
 		}
 
+		// 7b. Flatpak Chrome filesystem access
+		if isFlatpakChrome() {
+			if hasFlatpakFilesystemAccess() {
+				fmt.Println(styledPass("Flatpak Chrome filesystem access granted"))
+				passed++
+			} else {
+				fmt.Println(styledWarn("Flatpak Chrome lacks filesystem access to ~/.gcal-organizer/"))
+				fmt.Println(styledFix("flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome"))
+				warned++
+			}
+		}
+
 		// 8. Service status
 		if isServiceInstalled() {
 			fmt.Println(styledPass("Hourly service is installed"))
@@ -778,6 +790,20 @@ This command:
 
 		// Step 4: Launch Chrome with debugging
 		fmt.Println()
+
+		// Step 3b: Flatpak filesystem access check
+		if isFlatpakChrome() && !hasFlatpakFilesystemAccess() {
+			fmt.Println(styledWarn("Flatpak Chrome detected — filesystem access required"))
+			fmt.Println()
+			fmt.Println(boxStyle.Render(
+				"  Chrome is sandboxed by Flatpak and cannot access\n" +
+					"  ~/.gcal-organizer/chrome-data/ by default.\n\n" +
+					"  Run this command to grant access:\n\n" +
+					"  flatpak override --user --filesystem=~/.gcal-organizer com.google.Chrome\n\n" +
+					"  Then re-run 'gcal-organizer setup-browser'."))
+			return fmt.Errorf("Flatpak Chrome needs filesystem access to ~/.gcal-organizer/")
+		}
+
 		fmt.Println(subtleStyle.Render("  Step 4/5: Launching Chrome with remote debugging..."))
 
 		if isPortOpen(9222) {
@@ -930,4 +956,26 @@ func launchChrome(profilePath string) (*exec.Cmd, error) {
 	}
 
 	return cmd, nil
+}
+
+// isFlatpakChrome returns true if Chrome is installed via Flatpak.
+func isFlatpakChrome() bool {
+	return findChromeBinary() == "flatpak-chrome"
+}
+
+// hasFlatpakFilesystemAccess checks if the Flatpak Chrome override grants
+// access to ~/.gcal-organizer/. It checks the user-level overrides file.
+func hasFlatpakFilesystemAccess() bool {
+	home, _ := os.UserHomeDir()
+	overridesFile := filepath.Join(home, ".local", "share", "flatpak", "overrides", "com.google.Chrome")
+
+	data, err := os.ReadFile(overridesFile)
+	if err != nil {
+		return false
+	}
+
+	// Check if the overrides file contains a filesystem grant for ~/.gcal-organizer
+	content := string(data)
+	return strings.Contains(content, "~/.gcal-organizer") ||
+		strings.Contains(content, home+"/.gcal-organizer")
 }
