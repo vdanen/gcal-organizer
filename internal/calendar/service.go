@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/jflowers/gcal-organizer/internal/retry"
 	"github.com/jflowers/gcal-organizer/pkg/models"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
@@ -51,7 +52,12 @@ func (s *Service) ListRecentEvents(ctx context.Context, daysBack int) ([]*models
 			req.PageToken(pageToken)
 		}
 
-		result, err := req.Do()
+		var result *calendar.Events
+		err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+			var e error
+			result, e = req.Do()
+			return e
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list calendar events: %w", err)
 		}

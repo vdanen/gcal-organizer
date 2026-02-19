@@ -52,7 +52,10 @@ function parseArgs(): { docId: string; assignments: Assignment[]; chromeProfileP
     const args = process.argv.slice(2);
     let docId = '';
     let assignmentsJson = '';
-    let chromeProfilePath = '/Users/jflowers/Library/Application Support/Google/Chrome/Profile 1';
+    // Default to the dedicated automation profile; the Go CLI always passes
+    // --profile explicitly, so this default is only a safety fallback.
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    let chromeProfilePath = `${home}/.gcal-organizer/chrome-data`;
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--doc' && args[i + 1]) {
@@ -71,6 +74,14 @@ function parseArgs(): { docId: string; assignments: Assignment[]; chromeProfileP
         throw new Error('--doc argument is required');
     }
 
+    // Validate docId is a safe Google Docs ID (alphanumeric, hyphens, underscores).
+    // Prevents open-redirect / SSRF if a crafted value is passed by an attacker
+    // with local CLI access, since docId is interpolated directly into the URL
+    // and the browser session holds Google authentication cookies.
+    if (!/^[a-zA-Z0-9_-]{10,}$/.test(docId)) {
+        throw new Error(`Invalid document ID format: "${docId}". Expected alphanumeric/underscore/hyphen, min 10 chars.`);
+    }
+
     if (!assignmentsJson) {
         throw new Error('--assignments argument is required');
     }
@@ -84,6 +95,22 @@ function parseArgs(): { docId: string; assignments: Assignment[]; chromeProfileP
 
     return { docId, assignments, chromeProfilePath };
 }
+
+// Maximum total time the script is allowed to run before aborting.
+const SCRIPT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+// Set a hard kill-switch so a hung script never blocks the parent process.
+const scriptTimer = setTimeout(() => {
+    process.stderr.write('[assign] ERROR: Script exceeded 10-minute timeout, aborting\n');
+    process.stdout.write(JSON.stringify({
+        success: false,
+        results: [],
+        error: 'Script exceeded 10-minute timeout',
+    }));
+    process.exit(1);
+}, SCRIPT_TIMEOUT_MS);
+// Prevent the timer from keeping the process alive on normal exit.
+scriptTimer.unref();
 
 // Main execution
 async function main(): Promise<void> {
@@ -193,8 +220,9 @@ async function main(): Promise<void> {
 
             output.success = true;
         } finally {
-            // Disconnect from CDP without closing the user's Chrome
-            browser.close();
+            // Disconnect from CDP without closing the user's Chrome.
+            // Swallow any error in case Chrome was already closed.
+            try { browser.close(); } catch { /* already closed */ }
         }
 
     } catch (error) {
@@ -214,8 +242,18 @@ async function processAssignment(page: Page, assignment: Assignment): Promise<As
     const log = (msg: string) => process.stderr.write(`[assign] ${msg}\n`);
 
     try {
-        // Strip control characters (CR, VT, null, etc.) that Google Docs API may include
-        const sanitized = assignment.text.replace(/[\x00-\x1f\x7f\u200b\u200c\u200d\ufeff]/g, '').trim();
+        // Strip control characters that the Go side (unicode.IsControl/IsPrint) would also remove:
+        //  \x00-\x1f  C0 controls (NUL, CR, VT, etc.)
+        //  \x7f       DEL
+        //  \x80-\x9f  C1 controls (Go's unicode.IsControl covers these too)
+        //  \u200b-\u200d  Zero-width spaces
+        //  \u2028     Line separator
+        //  \u2029     Paragraph separator
+        //  \ufeff     BOM / zero-width no-break space
+        // This mirrors the Go-side sanitization in internal/docs/service.go.
+        const sanitized = assignment.text
+            .replace(/[\x00-\x1f\x7f\x80-\x9f\u200b-\u200d\u2028\u2029\ufeff]/g, '')
+            .trim();
         log(`--- Processing: "${sanitized.substring(0, 30)}..." → ${assignment.email}`);
 
         // ============================================================
@@ -281,10 +319,22 @@ async function processAssignment(page: Page, assignment: Assignment): Promise<As
                     log(`  Multiple matches, increasing search to ${Math.min(searchLen, maxLen)} chars`);
                 }
             } else {
-                // Can't read match count — proceed with current search
-                log(`  Could not read match count, proceeding`);
-                isUnique = true;
+                // Can't read the match count element (UI not ready or element absent).
+                // Treat as ambiguous (non-unique) and increase search length rather than
+                // proceeding blindly — a wrong checkbox assignment is worse than a failure.
+                searchLen += 10;
+                log(`  Could not read match count, extending search to ${Math.min(searchLen, maxLen)} chars`);
             }
+        }
+
+        // After exhausting the search text, fail the assignment rather than
+        // risk landing on the wrong checkbox occurrence in the document.
+        if (!isUnique) {
+            log(`  ERROR: Could not find a unique match for "${sanitized.substring(0, 40)}..." — skipping`);
+            await page.keyboard.press('Escape');
+            result.status = 'failed';
+            result.reason = 'Could not find a unique match for checkbox text — too many duplicates';
+            return result;
         }
 
         // Press Enter to jump to the match

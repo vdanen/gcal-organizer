@@ -3,10 +3,13 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -85,8 +88,8 @@ func (o *OAuthClient) loadToken() (*oauth2.Token, error) {
 
 // saveToken saves the OAuth token to file.
 func (o *OAuthClient) saveToken(token *oauth2.Token) error {
-	// Ensure directory exists
-	dir := o.tokenFile[:len(o.tokenFile)-len("/token.json")]
+	// Use filepath.Dir for a robust directory extraction (avoids fragile string slicing).
+	dir := filepath.Dir(o.tokenFile)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("unable to create token directory: %w", err)
 	}
@@ -100,9 +103,32 @@ func (o *OAuthClient) saveToken(token *oauth2.Token) error {
 	return json.NewEncoder(f).Encode(token)
 }
 
+// randomState generates a cryptographically random OAuth2 state parameter.
+//
+// In a loopback-redirect flow the state would be compared against the value
+// echoed back by Google's authorization server, providing CSRF protection.
+// This CLI uses a manual copy/paste flow instead: the user copies only the
+// authorization code from the redirect URL, so the state parameter is never
+// automatically verified. Generating a random (non-guessable) value is still
+// better than the previous static "state-token" string because it prevents
+// an observer who can read the terminal from replaying a known state value.
+// Full CSRF enforcement would require a loopback HTTP listener; that is a
+// future enhancement tracked as a potential improvement.
+func randomState() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random state: %w", err)
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
 // getTokenFromWeb starts an OAuth2 flow in the browser.
 func (o *OAuthClient) getTokenFromWeb(ctx context.Context) (*oauth2.Token, error) {
-	authURL := o.config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	state, err := randomState()
+	if err != nil {
+		return nil, err
+	}
+	authURL := o.config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	fmt.Print("🔗 Follow these steps to authorize gcal-organizer:\n\n")
 	fmt.Print("  1. Open this URL in your browser:\n\n")
 	fmt.Printf("     %v\n\n", authURL)

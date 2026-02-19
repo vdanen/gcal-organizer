@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jflowers/gcal-organizer/internal/retry"
 	"google.golang.org/genai"
 )
 
@@ -47,7 +48,12 @@ func NewClient(ctx context.Context, apiKey, modelName string) (*Client, error) {
 func (c *Client) ExtractActionItem(ctx context.Context, checkboxText string) (*ActionItemResponse, error) {
 	prompt := buildExtractionPrompt(checkboxText)
 
-	result, err := c.client.Models.GenerateContent(ctx, c.modelName, genai.Text(prompt), nil)
+	var result *genai.GenerateContentResponse
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		result, e = c.client.Models.GenerateContent(ctx, c.modelName, genai.Text(prompt), nil)
+		return e
+	})
 	if err != nil {
 		return nil, fmt.Errorf("Gemini API error: %w", err)
 	}
@@ -188,7 +194,12 @@ Example response:
 
 Your response:`, itemsList.String())
 
-	result, err := c.client.Models.GenerateContent(ctx, c.modelName, genai.Text(prompt), nil)
+	var result *genai.GenerateContentResponse
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		result, e = c.client.Models.GenerateContent(ctx, c.modelName, genai.Text(prompt), nil)
+		return e
+	})
 	if err != nil {
 		return nil, fmt.Errorf("Gemini API error: %w", err)
 	}

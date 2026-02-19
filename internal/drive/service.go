@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jflowers/gcal-organizer/internal/logging"
+	"github.com/jflowers/gcal-organizer/internal/retry"
 	"github.com/jflowers/gcal-organizer/pkg/models"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -83,8 +84,16 @@ func NewService(ctx context.Context, httpClient *http.Client, filenamePattern st
 
 // SetMasterFolder sets the master folder ID by name.
 func (s *Service) SetMasterFolder(ctx context.Context, folderName string) error {
-	query := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false", folderName)
-	result, err := s.client.Files.List().Q(query).Fields("files(id, name)").Do()
+	// escapeQuery prevents query-injection when folderName contains single quotes.
+	query := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+		escapeQuery(folderName))
+
+	var result *drive.FileList
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		result, e = s.client.Files.List().Q(query).Fields("files(id, name)").Do()
+		return e
+	})
 	if err != nil {
 		return fmt.Errorf("failed to find master folder: %w", err)
 	}
@@ -105,7 +114,12 @@ func (s *Service) GetMasterFolderName() string {
 
 // GetFileInfo retrieves basic file information by ID.
 func (s *Service) GetFileInfo(ctx context.Context, fileID string) (*models.Document, error) {
-	file, err := s.client.Files.Get(fileID).Fields("id, name, mimeType, owners, parents, webViewLink").Do()
+	var file *drive.File
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		file, e = s.client.Files.Get(fileID).Fields("id, name, mimeType, owners, parents, webViewLink").Do()
+		return e
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
@@ -122,7 +136,7 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 	if len(keywords) > 0 {
 		parts := make([]string, len(keywords))
 		for i, kw := range keywords {
-			parts[i] = fmt.Sprintf("name contains '%s'", kw)
+			parts[i] = fmt.Sprintf("name contains '%s'", escapeQuery(kw))
 		}
 		keywordQuery = "(" + strings.Join(parts, " or ") + ") and "
 	}
@@ -146,7 +160,12 @@ func (s *Service) ListMeetingDocuments(ctx context.Context, keywords []string) (
 			req.PageToken(pageToken)
 		}
 
-		result, err := req.Do()
+		var result *drive.FileList
+		err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+			var e error
+			result, e = req.Do()
+			return e
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list documents: %w", err)
 		}
@@ -249,7 +268,13 @@ func (s *Service) GetOrCreateMeetingFolder(ctx context.Context, meetingName stri
 	// Search for existing folder (escape special characters in name)
 	query := fmt.Sprintf("name = '%s' and '%s' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
 		escapeQuery(meetingName), s.masterFolderID)
-	result, err := s.client.Files.List().Q(query).Fields("files(id, name)").Do()
+
+	var result *drive.FileList
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		result, e = s.client.Files.List().Q(query).Fields("files(id, name)").Do()
+		return e
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to search for folder: %w", err)
 	}
@@ -279,7 +304,12 @@ func (s *Service) GetOrCreateMeetingFolder(ctx context.Context, meetingName stri
 		MimeType: "application/vnd.google-apps.folder",
 		Parents:  []string{s.masterFolderID},
 	}
-	created, err := s.client.Files.Create(folder).Fields("id, name").Do()
+	var created *drive.File
+	err = retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		created, e = s.client.Files.Create(folder).Fields("id, name").Do()
+		return e
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create folder: %w", err)
 	}
@@ -316,10 +346,13 @@ func (s *Service) MoveDocument(ctx context.Context, docID, docName, currentParen
 		}
 	}
 
-	_, err := s.client.Files.Update(docID, nil).
-		AddParents(targetFolderID).
-		RemoveParents(currentParentID).
-		Do()
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		_, e := s.client.Files.Update(docID, nil).
+			AddParents(targetFolderID).
+			RemoveParents(currentParentID).
+			Do()
+		return e
+	})
 	if err != nil {
 		return ActionResult{
 			Action:  "move",
@@ -337,24 +370,43 @@ func (s *Service) MoveDocument(ctx context.Context, docID, docName, currentParen
 }
 
 // ShortcutExists checks if a shortcut to the target file already exists in the folder.
+// Paginates through all pages so it does not miss shortcuts in large folders.
 // Returns: exists, existingShortcutName, debugInfo, error
 func (s *Service) ShortcutExists(ctx context.Context, targetFileID, folderID string) (bool, string, string, error) {
 	query := fmt.Sprintf("'%s' in parents and mimeType = 'application/vnd.google-apps.shortcut' and trashed = false",
 		folderID)
 
-	result, err := s.client.Files.List().
-		Q(query).
-		Fields("files(id, name, shortcutDetails)").
-		Do()
-	if err != nil {
-		return false, "", "", fmt.Errorf("failed to check for existing shortcuts: %w", err)
+	var allFiles []*drive.File
+	pageToken := ""
+	for {
+		var result *drive.FileList
+		err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+			req := s.client.Files.List().
+				Q(query).
+				Fields("nextPageToken, files(id, name, shortcutDetails)").
+				PageSize(100)
+			if pageToken != "" {
+				req.PageToken(pageToken)
+			}
+			var e error
+			result, e = req.Do()
+			return e
+		})
+		if err != nil {
+			return false, "", "", fmt.Errorf("failed to check for existing shortcuts: %w", err)
+		}
+		allFiles = append(allFiles, result.Files...)
+		pageToken = result.NextPageToken
+		if pageToken == "" {
+			break
+		}
 	}
 
 	// Build debug info showing all shortcuts found
 	var debugInfo string
-	if len(result.Files) > 0 {
-		debugInfo = fmt.Sprintf("Found %d shortcuts in folder. Looking for target: %s. ", len(result.Files), targetFileID)
-		for _, file := range result.Files {
+	if len(allFiles) > 0 {
+		debugInfo = fmt.Sprintf("Found %d shortcuts in folder. Looking for target: %s. ", len(allFiles), targetFileID)
+		for _, file := range allFiles {
 			if file.ShortcutDetails != nil {
 				debugInfo += fmt.Sprintf("[%s → %s] ", file.Name, file.ShortcutDetails.TargetId)
 			}
@@ -363,7 +415,7 @@ func (s *Service) ShortcutExists(ctx context.Context, targetFileID, folderID str
 		debugInfo = "No shortcuts found in folder"
 	}
 
-	for _, file := range result.Files {
+	for _, file := range allFiles {
 		if file.ShortcutDetails != nil && file.ShortcutDetails.TargetId == targetFileID {
 			return true, file.Name, debugInfo, nil
 		}
@@ -428,7 +480,10 @@ func (s *Service) CreateShortcut(ctx context.Context, fileID, fileName, targetFo
 			TargetId: fileID,
 		},
 	}
-	_, err := s.client.Files.Create(shortcut).Do()
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		_, e := s.client.Files.Create(shortcut).Do()
+		return e
+	})
 	if err != nil {
 		// Include file URL for requesting access if permission denied
 		fileURL := fmt.Sprintf("https://drive.google.com/file/d/%s/view", fileID)
@@ -455,7 +510,12 @@ func (s *Service) CreateShortcut(ctx context.Context, fileID, fileName, targetFo
 
 // GetFileName fetches the name of a file by its ID.
 func (s *Service) GetFileName(ctx context.Context, fileID string) (string, error) {
-	file, err := s.client.Files.Get(fileID).Fields("name").Do()
+	var file *drive.File
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		file, e = s.client.Files.Get(fileID).Fields("name").Do()
+		return e
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get file: %w", err)
 	}
@@ -464,7 +524,12 @@ func (s *Service) GetFileName(ctx context.Context, fileID string) (string, error
 
 // IsDocumentInFolder checks if a document is already in the specified folder.
 func (s *Service) IsDocumentInFolder(ctx context.Context, docID, folderID string) (bool, error) {
-	file, err := s.client.Files.Get(docID).Fields("parents").Do()
+	var file *drive.File
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		file, e = s.client.Files.Get(docID).Fields("parents").Do()
+		return e
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to get document: %w", err)
 	}
@@ -483,22 +548,40 @@ func (s *Service) IsDryRun() bool {
 }
 
 // FindShortcutToFile finds a shortcut in a folder that points to a specific file.
+// Paginates through all pages so it does not miss shortcuts in large folders.
 // Returns the shortcut ID if found, empty string otherwise.
 func (s *Service) FindShortcutToFile(ctx context.Context, targetFileID, folderID string) (string, error) {
 	query := fmt.Sprintf("'%s' in parents and mimeType = 'application/vnd.google-apps.shortcut' and trashed = false",
 		folderID)
 
-	result, err := s.client.Files.List().
-		Q(query).
-		Fields("files(id, shortcutDetails)").
-		Do()
-	if err != nil {
-		return "", fmt.Errorf("failed to search for shortcuts: %w", err)
-	}
+	pageToken := ""
+	for {
+		var result *drive.FileList
+		err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+			req := s.client.Files.List().
+				Q(query).
+				Fields("nextPageToken, files(id, shortcutDetails)").
+				PageSize(100)
+			if pageToken != "" {
+				req.PageToken(pageToken)
+			}
+			var e error
+			result, e = req.Do()
+			return e
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to search for shortcuts: %w", err)
+		}
 
-	for _, file := range result.Files {
-		if file.ShortcutDetails != nil && file.ShortcutDetails.TargetId == targetFileID {
-			return file.Id, nil
+		for _, file := range result.Files {
+			if file.ShortcutDetails != nil && file.ShortcutDetails.TargetId == targetFileID {
+				return file.Id, nil
+			}
+		}
+
+		pageToken = result.NextPageToken
+		if pageToken == "" {
+			break
 		}
 	}
 
@@ -517,7 +600,10 @@ func (s *Service) TrashFile(ctx context.Context, fileID, description string) Act
 		}
 	}
 
-	_, err := s.client.Files.Update(fileID, &drive.File{Trashed: true}).Do()
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		_, e := s.client.Files.Update(fileID, &drive.File{Trashed: true}).Do()
+		return e
+	})
 	if err != nil {
 		return ActionResult{
 			Action:  "trash",
@@ -547,9 +633,20 @@ func (s *Service) ShareFile(ctx context.Context, fileID, fileName, email, role s
 		}
 	}
 
-	// Check if user already has access
-	permissions, err := s.client.Permissions.List(fileID).Fields("permissions(emailAddress, role)").Do()
-	if err == nil {
+	// Check if user already has access. A failure here (e.g., caller lacks
+	// permission to list permissions) is non-fatal: we log a warning and
+	// proceed to the Create call, which is idempotent in practice because
+	// Drive returns 409/already-exists if the permission exists already.
+	var permissions *drive.PermissionList
+	if err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		permissions, e = s.client.Permissions.List(fileID).Fields("permissions(emailAddress, role)").Do()
+		return e
+	}); err != nil {
+		logging.Logger.Warn("could not list permissions, proceeding with share attempt",
+			"file", fileName, "email", email, "err", err)
+	}
+	if permissions != nil {
 		for _, perm := range permissions.Permissions {
 			if strings.EqualFold(perm.EmailAddress, email) {
 				return ActionResult{
@@ -569,9 +666,12 @@ func (s *Service) ShareFile(ctx context.Context, fileID, fileName, email, role s
 		EmailAddress: email,
 	}
 
-	_, err = s.client.Permissions.Create(fileID, permission).
-		SendNotificationEmail(false).
-		Do()
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		_, e := s.client.Permissions.Create(fileID, permission).
+			SendNotificationEmail(false).
+			Do()
+		return e
+	})
 	if err != nil {
 		return ActionResult{
 			Action:  "share",
@@ -590,9 +690,14 @@ func (s *Service) ShareFile(ctx context.Context, fileID, fileName, email, role s
 
 // CanEditFile checks if the current user owns or has editor access to the file.
 func (s *Service) CanEditFile(ctx context.Context, fileID string) bool {
-	file, err := s.client.Files.Get(fileID).
-		Fields("capabilities(canEdit)").
-		Do()
+	var file *drive.File
+	err := retry.Do(ctx, retry.DefaultConfig(), func() error {
+		var e error
+		file, e = s.client.Files.Get(fileID).
+			Fields("capabilities(canEdit)").
+			Do()
+		return e
+	})
 	if err != nil {
 		return false
 	}

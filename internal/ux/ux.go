@@ -55,42 +55,18 @@ func MissingToken() *ActionError {
 	}
 }
 
-// MissingNodeJS returns an error for missing Node.js.
-func MissingNodeJS() *ActionError {
+// OAuthSetupFailed returns an error for OAuth client creation failures.
+func OAuthSetupFailed(credPath string) *ActionError {
 	return &ActionError{
-		Message: "Node.js not found (required for task assignment)",
-		Fix:     "Install Node.js 18+ from https://nodejs.org — Steps 1-2 still work without it",
+		Message: fmt.Sprintf("failed to read OAuth credentials from %s", credPath),
+		Fix:     "Run 'gcal-organizer init' or download credentials from https://console.cloud.google.com/apis/credentials",
 	}
 }
 
-// MissingChromeProfile returns an error for missing Chrome data directory.
-func MissingChromeProfile(path string) *ActionError {
+// AuthFailed returns an error when authentication fails.
+func AuthFailed() *ActionError {
 	return &ActionError{
-		Message: fmt.Sprintf("Chrome data directory not found at %s", path),
-		Fix:     "Run 'gcal-organizer setup-browser' to create it",
-	}
-}
-
-// MissingConfigDir returns an error for missing config directory.
-func MissingConfigDir() *ActionError {
-	return &ActionError{
-		Message: "config directory ~/.gcal-organizer/ does not exist",
-		Fix:     "Run 'gcal-organizer init' to set up your configuration",
-	}
-}
-
-// MissingEnvFile returns an error for missing .env file.
-func MissingEnvFile() *ActionError {
-	return &ActionError{
-		Message: "environment file ~/.gcal-organizer/.env not found",
-		Fix:     "Run 'gcal-organizer init' to generate your configuration",
-	}
-}
-
-// ServiceNotInstalled returns an error for missing service.
-func ServiceNotInstalled() *ActionError {
-	return &ActionError{
-		Message: "hourly service is not installed",
-		Fix:     "Run 'gcal-organizer install' to set up the hourly service",
+		Message: "authentication with Google failed",
+		Fix:     "Run 'gcal-organizer auth login' to re-authenticate, then 'gcal-organizer doctor' for diagnostics",
 	}
 }
