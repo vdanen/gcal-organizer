@@ -164,7 +164,7 @@ GEMINI_API_KEY=your-gcp-api-key
 
 # Optional
 GCAL_MASTER_FOLDER_NAME="Meeting Notes"   # Default: "Meeting Notes"
-GCAL_DAYS_TO_LOOK_BACK=8                  # Default: 8
+GCAL_DAYS_TO_LOOK_BACK=1                  # Default: 1
 GCAL_FILENAME_KEYWORDS="Notes,Meeting"    # Comma-separated
 GCAL_FILENAME_PATTERN="(.+)\s*-\s*(\d{4}-\d{2}-\d{2})"
 GEMINI_MODEL="gemini-1.5-flash"           # Default: gemini-1.5-flash

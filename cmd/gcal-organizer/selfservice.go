@@ -479,7 +479,7 @@ func generateEnvFile(apiKey string) string {
 	b.WriteString("# Optional: Master folder name in Google Drive\n")
 	b.WriteString("GCAL_MASTER_FOLDER_NAME=\"Meeting Notes\"\n\n")
 	b.WriteString("# Optional: Days to look back for calendar events\n")
-	b.WriteString("GCAL_DAYS_TO_LOOK_BACK=\"8\"\n\n")
+	b.WriteString("GCAL_DAYS_TO_LOOK_BACK=\"1\"\n\n")
 	b.WriteString("# Optional: Keywords to filter documents (comma-separated)\n")
 	b.WriteString("GCAL_FILENAME_KEYWORDS=\"Notes,Meeting\"\n\n")
 	b.WriteString("# Optional: Gemini model\n")

@@ -191,7 +191,7 @@ As a user, I want to view my current configuration to verify settings are correc
 ### Configuration Requirements
 
 - **CR-001**: `GCAL_MASTER_FOLDER_NAME` - Name of the master folder (string)
-- **CR-002**: `GCAL_DAYS_TO_LOOK_BACK` - Calendar lookback period (integer, default: 8)
+- **CR-002**: `GCAL_DAYS_TO_LOOK_BACK` - Calendar lookback period (integer, default: 1)
 - **CR-003**: `GCAL_FILENAME_KEYWORDS` - Keywords to filter documents (comma-separated list)
 - **CR-004**: `GCAL_FILENAME_PATTERN` - Regex for parsing document names (string)
 

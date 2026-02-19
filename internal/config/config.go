@@ -56,7 +56,7 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		MasterFolderName:  "Meeting Notes",
-		DaysToLookBack:    8,
+		DaysToLookBack:    1,
 		FilenamePattern:   `(.+)\s*-\s*(\d{4}-\d{2}-\d{2})`,
 		FilenameKeywords:  []string{"Notes", "Meeting"},
 		GeminiModel:       "gemini-2.0-flash",

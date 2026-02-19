@@ -12,8 +12,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("expected MasterFolderName 'Meeting Notes', got %s", cfg.MasterFolderName)
 	}
 
-	if cfg.DaysToLookBack != 8 {
-		t.Errorf("expected DaysToLookBack 8, got %d", cfg.DaysToLookBack)
+	if cfg.DaysToLookBack != 1 {
+		t.Errorf("expected DaysToLookBack 1, got %d", cfg.DaysToLookBack)
 	}
 
 	if cfg.GeminiModel != "gemini-2.0-flash" {
