@@ -72,11 +72,12 @@ brew install gcal-organizer
 # Authenticate with Google
 gcal-organizer auth login
 
+# Set up browser automation and install hourly service
+gcal-organizer setup-browser
+gcal-organizer install
+
 # Test with dry-run first
 gcal-organizer run --dry-run --verbose
-
-# Start the hourly service
-brew services start gcal-organizer
 ```
 
 ### Install from Source
@@ -87,34 +88,38 @@ git clone https://github.com/jflowers/gcal-organizer.git
 cd gcal-organizer
 make install
 
-# Install browser automation dependencies
-cd browser && npm install && cd ..
-
-# Authenticate
+# Configure and authenticate
+gcal-organizer init
 gcal-organizer auth login
 
-# Run
+# Set up browser automation
+gcal-organizer setup-browser
+
+# Test
 gcal-organizer run --dry-run --verbose
+
+# Install hourly service
+gcal-organizer install
 ```
 
 ### Run as an Hourly Service
 
 ```bash
-# Via Homebrew (preferred):
-brew services start gcal-organizer
+# Install the hourly service (works for both Homebrew and source installs):
+gcal-organizer install
 
-# Or via Makefile (if installed from source):
-make install-service
-
-# Check status and logs
-make service-status
-make service-logs
-
-# Trigger an immediate run
-make service-trigger
+# Check status
+gcal-organizer doctor
 
 # Remove the service
-make uninstall-service
+gcal-organizer uninstall
+
+# Or via Makefile (source installs only):
+make install-service    # install
+make service-status     # check status
+make service-logs       # view logs
+make service-trigger    # trigger immediate run
+make uninstall-service  # remove
 ```
 
 The service runs with `GCAL_DAYS_TO_LOOK_BACK=1` to process only the last day of events.
