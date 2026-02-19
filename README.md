@@ -15,7 +15,7 @@ GCal Organizer runs a 3-step workflow that keeps your Google Drive and Calendar 
 |------|---------|-------------|
 | 1 | `organize` | Finds meeting docs in Drive and organizes them into topic-based folders |
 | 2 | `sync-calendar` | Links calendar attachments to meeting folders, shares with attendees |
-| 3 | `assign-tasks` | Extracts checkbox action items from `Notes by Gemini` docs and assigns them in Google Docs |
+| 3 | `assign-tasks` | Locates checkbox action items in Google Docs `Notes by Gemini` and assigns them if Gemini can determine the assignee  |
 
 Run all three with `gcal-organizer run`, or each step individually.
 
