@@ -1,5 +1,10 @@
 # GCal Organizer
 
+[![CI](https://github.com/jflowers/gcal-organizer/actions/workflows/ci.yml/badge.svg)](https://github.com/jflowers/gcal-organizer/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jflowers/gcal-organizer)](https://goreportcard.com/report/github.com/jflowers/gcal-organizer)
+[![GitHub release](https://img.shields.io/github/v/release/jflowers/gcal-organizer)](https://github.com/jflowers/gcal-organizer/releases/latest)
+[![License](https://img.shields.io/github/license/jflowers/gcal-organizer)](LICENSE)
+
 A Go CLI tool that automates meeting note organization, calendar attachment syncing, and AI-powered task assignment using Google Workspace APIs and Gemini AI.
 
 ## ✨ What It Does
